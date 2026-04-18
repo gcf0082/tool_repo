@@ -7,7 +7,7 @@
 **服务端：**
 
 ```bash
-go run . -dir ./packages -port 8080
+go run . -dir . -port 8080    # 当前目录下要有 packages/ 和/或 scripts/
 ```
 
 **客户端（任何一台新机器）：**
@@ -19,6 +19,18 @@ tool_cli install ripgrep                               # 装工具
 ```
 
 ## 目录结构
+
+`-dir <root>` 下约定两个子目录：
+
+```
+<root>/
+├── packages/    # 二进制分发（下详）
+└── scripts/     # shell 脚本（下详）
+```
+
+任一存在即可；缺失的那个对应端点会被关闭。
+
+### packages/ 布局
 
 `packages/` 下必须有一层 `<name>/` 目录，三种布局共存：
 
@@ -74,26 +86,25 @@ tool_cli install ripgrep
 ## 服务端运行参数
 
 ```bash
-tool_repo -dir ./packages -host 0.0.0.0 -port 8080
+tool_repo -dir . -host 0.0.0.0 -port 8080
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `-dir` | `./packages` | packages 数据目录（`-upstream` 模式下忽略） |
-| `-scripts` | `./scripts` | scripts 目录（可选；不存在就禁用 `/get_script`/`/put_script`；`-upstream` 模式下忽略） |
+| `-dir` | `.` | 数据根目录；下面约定 `packages/` 和 `scripts/` 两个子目录（任一存在即可，另一个缺失则对应端点关闭）。`-upstream` 模式下忽略 |
 | `-host` | `0.0.0.0` | 绑定 IP |
 | `-port` | `8080` | 监听端口 |
-| `-upstream` | *(空)* | 若设置则进入转发模式，不再要求 `-dir`/`-scripts`；值形如 `http://other:8080` |
+| `-upstream` | *(空)* | 若设置则进入转发模式，不再需要 `-dir`；值形如 `http://other:8080` |
 
 ## 转发模式（类 nginx 反代）
 
 只当"入口"用、不想在本机维护 `packages/` 时：
 
 ```bash
-# 源节点（有 packages/）
-tool_repo -dir ./packages -port 8080
+# 源节点（数据根目录里有 packages/ 和/或 scripts/）
+tool_repo -dir /srv/tool_repo -port 8080
 
-# 前端入口节点（无 packages/）
+# 前端入口节点（不需要 -dir）
 tool_repo -upstream http://source-host:8080 -port 9090
 ```
 
@@ -150,10 +161,10 @@ TOOL_CLI_URL=http://other:9090 tool_cli install fzf
 
 ## 远端脚本：执行 / 上传
 
-服务端有个 `scripts/` 目录（和 `packages/` 并列），支持多级嵌套：
+数据根目录下的 `scripts/`（见"目录结构"一节）支持多级嵌套：
 
 ```
-scripts/
+<root>/scripts/
 ├── hello.sh
 └── deploy/
     ├── staging.sh

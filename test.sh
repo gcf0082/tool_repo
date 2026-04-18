@@ -10,7 +10,7 @@ PORT="${PORT:-18090}"
 FWD_PORT="${FWD_PORT:-18091}"
 BASE="http://${HOST}:${PORT}"
 FWD_BASE="http://${HOST}:${FWD_PORT}"
-DATA_DIR="./testdata/packages"
+DATA_DIR="./testdata"
 LOG="$(mktemp)"
 FWD_LOG="$(mktemp)"
 PASS_FILE="$(mktemp)"
@@ -78,7 +78,7 @@ log "== build =="
 go build -o ./tool_repo . || { log "build failed"; exit 1; }
 
 log "== start server on ${HOST}:${PORT} =="
-./tool_repo -host "$HOST" -port "$PORT" -dir "$DATA_DIR" -scripts ./testdata/scripts >"$LOG" 2>&1 &
+./tool_repo -host "$HOST" -port "$PORT" -dir "$DATA_DIR" >"$LOG" 2>&1 &
 PID=$!
 
 for _ in {1..30}; do

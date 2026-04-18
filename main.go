@@ -8,15 +8,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 )
 
 func main() {
-	dir := flag.String("dir", "./packages", "root directory holding package tree (ignored when -upstream is set)")
-	scriptsDir := flag.String("scripts", "./scripts", "scripts root directory (optional; ignored when -upstream is set)")
+	dir := flag.String("dir", ".", "data root; must contain a packages/ and/or scripts/ subdirectory (ignored when -upstream is set)")
 	host := flag.String("host", "0.0.0.0", "bind IP address")
 	port := flag.Int("port", 8080, "listen port")
-	upstream := flag.String("upstream", "", "if set, proxy business requests to this URL and serve no local packages/scripts")
+	upstream := flag.String("upstream", "", "if set, proxy business requests to this URL and serve no local data")
 	flag.Parse()
 
 	if *port < 1 || *port > 65535 {
@@ -33,16 +33,22 @@ func main() {
 		s.Proxy = newProxy(u)
 		log.Printf("upstream mode: proxying /get_tool to %s", u)
 	} else {
-		if _, err := os.Stat(*dir); err != nil {
-			log.Fatalf("dir %q: %v", *dir, err)
+		if st, err := os.Stat(*dir); err != nil || !st.IsDir() {
+			log.Fatalf("-dir %q: not a directory", *dir)
 		}
-		s.Root = *dir
-		if st, err := os.Stat(*scriptsDir); err == nil && st.IsDir() {
-			s.ScriptsRoot = *scriptsDir
-			log.Printf("local mode: serving packages=%s scripts=%s", *dir, *scriptsDir)
-		} else {
-			log.Printf("local mode: serving packages=%s (no scripts dir)", *dir)
+		pkgDir := filepath.Join(*dir, "packages")
+		scrDir := filepath.Join(*dir, "scripts")
+		if st, err := os.Stat(pkgDir); err == nil && st.IsDir() {
+			s.Root = pkgDir
 		}
+		if st, err := os.Stat(scrDir); err == nil && st.IsDir() {
+			s.ScriptsRoot = scrDir
+		}
+		if s.Root == "" && s.ScriptsRoot == "" {
+			log.Fatalf("-dir %q: neither packages/ nor scripts/ found under it", *dir)
+		}
+		log.Printf("local mode: data root=%s (packages=%v scripts=%v)",
+			*dir, s.Root != "", s.ScriptsRoot != "")
 	}
 
 	addr := net.JoinHostPort(*host, strconv.Itoa(*port))
