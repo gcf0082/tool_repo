@@ -318,31 +318,34 @@ unset HOME; export HOME="/root"
 log "== install_tool_cli bootstrap =="
 boot_tmp="$(mktemp -d)"
 export HOME="$(mktemp -d)"
-(
-  cd "$boot_tmp"
-  if curl -fsSL "${BASE}/install_tool_cli" | sh >/dev/null 2>&1; then
-    if [[ -x ./tool_cli ]]; then
-      ok "install_tool_cli wrote executable ./tool_cli"
-    else
-      ko "install_tool_cli did not produce ./tool_cli"
-    fi
-    # URL should have been auto-configured
-    cfg="$HOME/.tool_cli/config.json"
-    if [[ -f "$cfg" ]] && grep -q "\"url\": \"$BASE\"" "$cfg"; then
-      ok "install_tool_cli auto-configured URL=$BASE"
-    else
-      ko "install_tool_cli config wrong: $(cat $cfg 2>&1)"
-    fi
-    # The installed tool_cli should be usable
-    if ./tool_cli ping >/dev/null 2>&1; then
-      ok "bootstrapped tool_cli can ping server"
-    else
-      ko "bootstrapped tool_cli ping failed"
-    fi
+DEST_PATH="$boot_tmp/tool_cli"
+if curl -fsSL "${BASE}/install_tool_cli" | DEST="$DEST_PATH" sh >/dev/null 2>&1; then
+  if [[ -x "$DEST_PATH" ]]; then
+    ok "install_tool_cli wrote executable $DEST_PATH (DEST override honored)"
   else
-    ko "install_tool_cli pipe|sh failed"
+    ko "install_tool_cli did not produce $DEST_PATH"
   fi
-)
+  cfg="$HOME/.tool_cli/config.json"
+  if [[ -f "$cfg" ]] && grep -q "\"url\": \"$BASE\"" "$cfg"; then
+    ok "install_tool_cli auto-configured URL=$BASE"
+  else
+    ko "install_tool_cli config wrong: $(cat $cfg 2>&1)"
+  fi
+  if "$DEST_PATH" ping >/dev/null 2>&1; then
+    ok "bootstrapped tool_cli can ping server"
+  else
+    ko "bootstrapped tool_cli ping failed"
+  fi
+else
+  ko "install_tool_cli pipe|sh failed"
+fi
+# verify default destination string is present in the served script
+default_script="$(curl -sS "${BASE}/install_tool_cli")"
+if [[ "$default_script" == *"/usr/local/bin/tool_cli"* ]]; then
+  ok "install_tool_cli default DEST=/usr/local/bin/tool_cli"
+else
+  ko "install_tool_cli default DEST missing /usr/local/bin/tool_cli"
+fi
 rm -rf "$boot_tmp" "$HOME"
 export HOME="/root"
 

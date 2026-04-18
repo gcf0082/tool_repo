@@ -88,7 +88,13 @@ tool_repo -upstream http://source-host:8080 -port 9090
 curl -fsSL http://host:8080/install_tool_cli | sh
 ```
 
-服务端会把自己嵌入的 `tool_cli` 脚本写到当前目录，并用访问者实际用的 URL 自动执行 `set-url`，这样不用手动配置就可以直接用。
+服务端把嵌入的 `tool_cli` 脚本装到 **`/usr/local/bin/tool_cli`**（非 root 自动用 sudo），并用访问者实际用的 URL 自动执行 `set-url`，装完即可用。
+
+自定义安装位置（比如不要 sudo）：
+
+```bash
+curl -fsSL http://host:8080/install_tool_cli | DEST=$HOME/.local/bin/tool_cli sh
+```
 
 ### 日常使用
 

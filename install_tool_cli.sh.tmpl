@@ -1,15 +1,30 @@
 #!/bin/sh
 set -eu
 
-dest="${PWD}/tool_cli"
-echo "writing $dest ..."
-cat > "$dest" <<'__TOOL_CLI_EOF__'
+DEST="${DEST:-/usr/local/bin/tool_cli}"
+dir="$(dirname "$DEST")"
+
+tmp="$(mktemp)"
+cat > "$tmp" <<'__TOOL_CLI_EOF__'
 {{.Script}}
 __TOOL_CLI_EOF__
-chmod +x "$dest"
+
+echo "installing tool_cli to $DEST ..."
+if [ -w "$dir" ]; then
+  install -m 755 "$tmp" "$DEST"
+elif command -v sudo >/dev/null 2>&1; then
+  echo "(need sudo to write $dir — override with DEST=...)"
+  sudo install -m 755 "$tmp" "$DEST"
+else
+  echo "cannot write $DEST and sudo not available" >&2
+  echo "override: DEST=\$HOME/.local/bin/tool_cli  curl ... | sh" >&2
+  rm -f "$tmp"
+  exit 1
+fi
+rm -f "$tmp"
 
 echo "configuring server URL: {{.BaseURL}}"
-"$dest" set-url "{{.BaseURL}}" >/dev/null
+"$DEST" set-url "{{.BaseURL}}" >/dev/null
 
-echo "done. tool_cli installed at $dest"
-echo "try: $dest help"
+echo "done. tool_cli installed at $DEST"
+echo "try: tool_cli help"

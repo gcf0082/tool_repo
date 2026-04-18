@@ -89,11 +89,13 @@ func TestInstallToolCLIEndpoint(t *testing.T) {
 		t.Errorf("content-type %q", ct)
 	}
 	for _, want := range []string{
-		"cat > \"$dest\" <<'__TOOL_CLI_EOF__'",
-		"#!/usr/bin/env bash",      // start of embedded tool_cli
+		"/usr/local/bin/tool_cli",   // default DEST
+		"DEST:-",                    // env override pattern
+		"cat > \"$tmp\" <<'__TOOL_CLI_EOF__'",
+		"#!/usr/bin/env bash",       // start of embedded tool_cli
 		"tool_cli — client wrapper", // a marker inside tool_cli
-		"set-url",                   // wrapper invokes set-url
-		`"$dest" set-url "http://`,
+		`"$DEST" set-url "http://`,  // wrapper invokes set-url
+		"install -m 755",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("install_tool_cli script missing %q", want)
