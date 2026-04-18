@@ -67,6 +67,7 @@ Commands:
   set-url <url>                     Save server URL to ~/.tool_cli/config.json
   config                            Show current config
   url                               Print the configured URL
+  ping                              Check connectivity to the configured server
   get <name> [options]              Download a package into the current dir
     options:
       --version, -v <v>             Exact version (default: latest)
@@ -101,6 +102,19 @@ case "$cmd" in
   url)
     u="$(read_url)"
     [[ -n "$u" ]] && echo "$u" || { echo "(unset)"; exit 1; }
+    ;;
+  ping)
+    base="$(require_url)"
+    # HEAD on /, but fall back to GET if HEAD not supported
+    code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 "${base}/")" || code=000
+    body="$(curl -sS --max-time 5 "${base}/" 2>/dev/null || true)"
+    if [[ "$code" == "200" && "$body" == *"tool_repo"* ]]; then
+      echo "OK  ${base}  (HTTP ${code})"
+    else
+      echo "FAIL  ${base}  (HTTP ${code})" >&2
+      [[ -n "$body" ]] && echo "body: ${body:0:200}" >&2
+      exit 1
+    fi
     ;;
   get)
     [[ $# -ge 1 ]] || { echo "usage: tool_cli get <name> [--version V] [--os X --arch Y]" >&2; exit 2; }

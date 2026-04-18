@@ -9,11 +9,18 @@ import (
 //go:embed install.sh.tmpl
 var installTmpl string
 
+//go:embed install_tool_cli.sh.tmpl
+var installCLITmpl string
+
+//go:embed tool_cli
+var toolCLIScript string
+
 const rootHelp = `tool_repo — simple tool distribution
 
 Endpoints:
-  /get_tool      — download a package           (curl /get_tool      for details)
-  /install_tool  — one-line install script      (curl /install_tool  for details)
+  /get_tool          — download a package             (curl /get_tool          for details)
+  /install_tool      — one-line install script        (curl /install_tool      for details)
+  /install_tool_cli  — bootstrap the tool_cli client  (pipe to sh to install)
 `
 
 const getHelp = `GET /get_tool?name=<n>[&os=<os>&arch=<arch>][&version=<v>]
@@ -53,6 +60,7 @@ Example:
 `
 
 var installTemplate = template.Must(template.New("install").Parse(installTmpl))
+var installCLITemplate = template.Must(template.New("install_cli").Parse(installCLITmpl))
 
 func writeHelp(w http.ResponseWriter, text string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -85,6 +93,15 @@ func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
 		Name    string
 		BaseURL string
 	}{name, base})
+}
+
+func (s *Server) handleInstallCLI(w http.ResponseWriter, r *http.Request) {
+	base := publicBaseURL(r)
+	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
+	_ = installCLITemplate.Execute(w, struct {
+		Script  string
+		BaseURL string
+	}{toolCLIScript, base})
 }
 
 func publicBaseURL(r *http.Request) string {

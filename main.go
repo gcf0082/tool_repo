@@ -44,6 +44,7 @@ func main() {
 	mux.HandleFunc("GET /{$}", s.handleRootHelp)
 	mux.HandleFunc("GET /get_tool", s.handleGet)
 	mux.HandleFunc("GET /install_tool", s.handleInstall)
+	mux.HandleFunc("GET /install_tool_cli", s.handleInstallCLI)
 
 	log.Printf("tool_repo listening on %s", addr)
 	if err := http.ListenAndServe(addr, mux); err != nil {

@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+dest="${PWD}/tool_cli"
+echo "writing $dest ..."
+cat > "$dest" <<'__TOOL_CLI_EOF__'
+{{.Script}}
+__TOOL_CLI_EOF__
+chmod +x "$dest"
+
+echo "configuring server URL: {{.BaseURL}}"
+"$dest" set-url "{{.BaseURL}}" >/dev/null
+
+echo "done. tool_cli installed at $dest"
+echo "try: $dest help"

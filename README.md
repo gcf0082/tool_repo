@@ -82,17 +82,23 @@ tool_repo -upstream http://source-host:8080 -port 9090
 
 `tool_cli` 是 bash 写的轻量客户端，包住 `curl` 操作，避免每次记 URL。配置放在 `~/.tool_cli/config.json`。
 
-```bash
-# 一次性配好
-./tool_cli set-url http://host:8080
+### 一键引导（没有 tool_cli 时）
 
-# 下载（os/arch 自动 uname 推断）
-./tool_cli get fzf
+```bash
+curl -fsSL http://host:8080/install_tool_cli | sh
+```
+
+服务端会把自己嵌入的 `tool_cli` 脚本写到当前目录，并用访问者实际用的 URL 自动执行 `set-url`，这样不用手动配置就可以直接用。
+
+### 日常使用
+
+```bash
+./tool_cli set-url http://host:8080    # 如果引导时没自动配
+./tool_cli ping                        # 测试与服务端是否连通
+./tool_cli get fzf                     # os/arch 自动 uname 推断
 ./tool_cli get ripgrep --version 14.1.0
 ./tool_cli get mytool --os darwin --arch arm64
-
-# 一行安装到当前目录
-./tool_cli install fzf
+./tool_cli install fzf                 # 一行安装到当前目录
 
 # 单次覆盖 URL 不改配置
 TOOL_CLI_URL=http://other:9090 ./tool_cli install fzf

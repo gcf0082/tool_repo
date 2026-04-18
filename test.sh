@@ -13,24 +13,23 @@ FWD_BASE="http://${HOST}:${FWD_PORT}"
 DATA_DIR="./testdata/packages"
 LOG="$(mktemp)"
 FWD_LOG="$(mktemp)"
+PASS_FILE="$(mktemp)"
+FAIL_FILE="$(mktemp)"
 PID=""
 FWD_PID=""
-
-pass=0
-fail=0
 
 cleanup() {
   [[ -n "$PID" ]] && kill "$PID" 2>/dev/null || true
   [[ -n "$FWD_PID" ]] && kill "$FWD_PID" 2>/dev/null || true
   wait "$PID" 2>/dev/null || true
   wait "$FWD_PID" 2>/dev/null || true
-  rm -f "$LOG" "$FWD_LOG"
+  rm -f "$LOG" "$FWD_LOG" "$PASS_FILE" "$FAIL_FILE"
 }
 trap cleanup EXIT
 
 log() { printf '%s\n' "$*"; }
-ok()  { pass=$((pass+1)); log "  PASS $*"; }
-ko()  { fail=$((fail+1)); log "  FAIL $*"; }
+ok()  { echo x >> "$PASS_FILE"; log "  PASS $*"; }
+ko()  { echo x >> "$FAIL_FILE"; log "  FAIL $*"; }
 
 # assert_status <url> <want_status> [want_body_exact]
 assert_status() {
@@ -298,9 +297,58 @@ else
   ko "TOOL_CLI_URL env override: got $cli_url_env"
 fi
 
+# ping: success against real server
+if TOOL_CLI_URL="$BASE" ./tool_cli ping >/dev/null 2>&1; then
+  ok "tool_cli ping -> configured server"
+else
+  ko "tool_cli ping failed against $BASE"
+fi
+
+# ping: failure against dead URL
+if TOOL_CLI_URL="http://127.0.0.1:1" ./tool_cli ping >/dev/null 2>&1; then
+  ko "tool_cli ping should have failed against unreachable URL"
+else
+  ok "tool_cli ping failed as expected against unreachable URL"
+fi
+
 rm -rf "$CLI_HOME"
-unset HOME; export HOME="/root"   # restore so nothing else breaks
+unset HOME; export HOME="/root"
+
+# ---- /install_tool_cli bootstrap ----
+log "== install_tool_cli bootstrap =="
+boot_tmp="$(mktemp -d)"
+export HOME="$(mktemp -d)"
+(
+  cd "$boot_tmp"
+  if curl -fsSL "${BASE}/install_tool_cli" | sh >/dev/null 2>&1; then
+    if [[ -x ./tool_cli ]]; then
+      ok "install_tool_cli wrote executable ./tool_cli"
+    else
+      ko "install_tool_cli did not produce ./tool_cli"
+    fi
+    # URL should have been auto-configured
+    cfg="$HOME/.tool_cli/config.json"
+    if [[ -f "$cfg" ]] && grep -q "\"url\": \"$BASE\"" "$cfg"; then
+      ok "install_tool_cli auto-configured URL=$BASE"
+    else
+      ko "install_tool_cli config wrong: $(cat $cfg 2>&1)"
+    fi
+    # The installed tool_cli should be usable
+    if ./tool_cli ping >/dev/null 2>&1; then
+      ok "bootstrapped tool_cli can ping server"
+    else
+      ko "bootstrapped tool_cli ping failed"
+    fi
+  else
+    ko "install_tool_cli pipe|sh failed"
+  fi
+)
+rm -rf "$boot_tmp" "$HOME"
+export HOME="/root"
+
+pass="$(wc -l < "$PASS_FILE" | tr -d ' ')"
+fail="$(wc -l < "$FAIL_FILE" | tr -d ' ')"
 
 log ""
 log "== summary: ${pass} passed, ${fail} failed =="
-[[ $fail -eq 0 ]]
+[[ "$fail" -eq 0 ]]

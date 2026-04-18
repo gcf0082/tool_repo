@@ -77,6 +77,30 @@ func TestPublicBaseURL(t *testing.T) {
 	}
 }
 
+func TestInstallToolCLIEndpoint(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, body := get(t, ts.URL+"/install_tool_cli")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d body=%q", resp.StatusCode, body)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "shellscript") {
+		t.Errorf("content-type %q", ct)
+	}
+	for _, want := range []string{
+		"cat > \"$dest\" <<'__TOOL_CLI_EOF__'",
+		"#!/usr/bin/env bash",      // start of embedded tool_cli
+		"tool_cli — client wrapper", // a marker inside tool_cli
+		"set-url",                   // wrapper invokes set-url
+		`"$dest" set-url "http://`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("install_tool_cli script missing %q", want)
+		}
+	}
+}
+
 func TestInstallScriptUsesForwardedHost(t *testing.T) {
 	ts, _ := newTestServer(t)
 	defer ts.Close()
