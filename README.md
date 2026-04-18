@@ -55,9 +55,28 @@ go run . -dir ./packages -host 0.0.0.0 -port 8080
 ```
 
 参数：
-- `-dir`  数据目录，默认 `./packages`
-- `-host` 绑定 IP，默认 `0.0.0.0`
-- `-port` 端口，默认 `8080`
+- `-dir`       数据目录，默认 `./packages`（`-upstream` 模式下忽略）
+- `-host`      绑定 IP，默认 `0.0.0.0`
+- `-port`      端口，默认 `8080`
+- `-upstream`  转发模式：把业务请求代理到另一个 tool_repo
+
+## 转发模式（类 nginx 反代）
+
+当你只想要一个入口、不想在本机维护 `packages/` 时，用 `-upstream`：
+
+```bash
+# 源节点（有 packages/）
+tool_repo -dir ./packages -port 8080
+
+# 前端入口节点（无 packages/）
+tool_repo -upstream http://source-host:8080 -port 9090
+```
+
+在前端节点上发的请求：
+
+- `GET /get_tool?...` → 反代到上游，原样透传响应（含 Content-Disposition）
+- `GET /install_tool?name=...` → 本地渲染脚本，`BASE` 指向前端节点自己；脚本回头调前端的 `/get_tool`，再被代理到上游。对最终用户而言，整个链路的入口永远是前端节点
+- `X-Forwarded-For` 会被设置，`X-Forwarded-Host`/`X-Forwarded-Proto` 不会（避免上游误把回链指向代理外主机）
 
 ## 构建
 

@@ -73,9 +73,11 @@ func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad or missing name", http.StatusBadRequest)
 		return
 	}
-	if _, err := scan(s.Root, name); err != nil {
-		writeErr(w, err)
-		return
+	if s.Proxy == nil {
+		if _, err := scan(s.Root, name); err != nil {
+			writeErr(w, err)
+			return
+		}
 	}
 	base := publicBaseURL(r)
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")

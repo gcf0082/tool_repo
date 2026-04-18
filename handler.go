@@ -5,17 +5,25 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"path/filepath"
 	"strings"
 )
 
 type Server struct {
-	Root string
+	Root     string
+	Upstream *url.URL
+	Proxy    *httputil.ReverseProxy
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	if len(r.URL.RawQuery) == 0 {
 		writeHelp(w, getHelp)
+		return
+	}
+	if s.Proxy != nil {
+		s.Proxy.ServeHTTP(w, r)
 		return
 	}
 	q := r.URL.Query()
