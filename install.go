@@ -15,12 +15,16 @@ var installCLITmpl string
 //go:embed tool_cli
 var toolCLIScript string
 
+//go:embed tool_cli_help.txt
+var toolCLIHelp string
+
 const rootHelp = `tool_repo — simple tool distribution
 
 Endpoints:
   /get_tool          — download a package             (curl /get_tool          for details)
   /install_tool      — one-line install script        (curl /install_tool      for details)
   /install_tool_cli  — bootstrap the tool_cli client  (curl | sh to install)
+  /tool_cli_help     — tool_cli subcommand reference (always-fresh help)
   /get_script        — read a shell script from scripts/<path>
   /put_script        — upload a shell script to scripts/<path>  (PUT, curl -T)
 
@@ -84,6 +88,10 @@ func writeHelp(w http.ResponseWriter, text string) {
 
 func (s *Server) handleRootHelp(w http.ResponseWriter, r *http.Request) {
 	writeHelp(w, rootHelp)
+}
+
+func (s *Server) handleToolCLIHelp(w http.ResponseWriter, r *http.Request) {
+	writeHelp(w, toolCLIHelp)
 }
 
 func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {

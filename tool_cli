@@ -60,31 +60,25 @@ detect_arch() {
 }
 
 usage() {
-  cat <<'EOF'
+  # Help is served by the tool_repo so it always matches the deployed
+  # server version. Fall back to a brief local hint if the server is
+  # unreachable or unconfigured.
+  local base
+  base="$(read_url)"
+  if [[ -n "$base" ]] && curl -fsSL --max-time 5 "${base}/tool_cli_help" 2>/dev/null; then
+    return 0
+  fi
+  cat >&2 <<'EOF'
 tool_cli — client wrapper for tool_repo
 
-Commands:
-  set-url <url>                     Save server URL to ~/.tool_cli/config.json
-  config                            Show current config
-  url                               Print the configured URL
-  ping                              Check connectivity to the configured server
-  get <name> [options]              Download a package
-    options:
-      --version, -v <v>             Exact version (default: latest)
-      --os <os>                     Override os (default: detected via uname)
-      --arch <arch>                 Override arch (default: detected via uname)
-      --dir, -d <path>              Target directory (default: current dir)
-  install <name> [options]          Download + install (pipe|sh)
-    options:
-      --dir, -d <path>              Install directory (default: current dir)
-  run remote://<path> [args...]     Execute a remote shell script via pipe
-                                    (args are passed to the script's $@)
-  push <local> remote://<path>      Upload a local file to scripts/<path>
-  help                              Show this message
+(Full help is served at $URL/tool_cli_help but that endpoint is unreachable.)
+Configure the server URL first: tool_cli set-url <url>
+Then retry:                     tool_cli help
 
-Environment:
-  TOOL_CLI_URL=<url>                Override the configured URL for one call
+Minimal command list:
+  set-url, config, url, ping, get, install, run, push, help
 EOF
+  return 1
 }
 
 cmd="${1:-help}"

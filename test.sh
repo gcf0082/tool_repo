@@ -117,6 +117,11 @@ assert_status        "/install_tool" 200
 assert_body_contains "/install_tool" "Return a shell script"
 assert_body_contains "/install_tool" "| sh"
 
+assert_status        "/tool_cli_help" 200
+assert_body_contains "/tool_cli_help" "tool_cli — client wrapper"
+assert_body_contains "/tool_cli_help" "run remote"
+assert_body_contains "/tool_cli_help" "push <local>"
+
 log "== install_tool assertions =="
 assert_status        "/install_tool?name=fzf" 200
 assert_body_contains "/install_tool?name=fzf" 'NAME="fzf"'
@@ -336,6 +341,24 @@ if TOOL_CLI_URL="http://127.0.0.1:1" ./tool_cli ping >/dev/null 2>&1; then
 else
   ok "tool_cli ping failed as expected against unreachable URL"
 fi
+
+# help: fetched from server, contains latest subcommands
+help_out="$(TOOL_CLI_URL="$BASE" ./tool_cli help 2>&1 || true)"
+if [[ "$help_out" == *"run remote"* && "$help_out" == *"push <local>"* ]]; then
+  ok "tool_cli help fetched from server and includes run/push"
+else
+  ko "tool_cli help missing server content: ${help_out:0:200}"
+fi
+
+# help without configured URL → prints fallback, non-zero exit
+unset_cfg="$(mktemp -d)"
+helpfail_out="$(env -u TOOL_CLI_URL HOME="$unset_cfg" ./tool_cli help 2>&1 || true)"
+if [[ "$helpfail_out" == *"unreachable"* ]]; then
+  ok "tool_cli help fallback when URL unset"
+else
+  ko "tool_cli help fallback wrong: $helpfail_out"
+fi
+rm -rf "$unset_cfg"
 
 # run: execute a remote script with args → stdout contains the expected text
 run_out="$(TOOL_CLI_URL="$BASE" ./tool_cli run remote://hello.sh foo "bar baz" 2>&1 || true)"
