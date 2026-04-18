@@ -1,4 +1,17 @@
 #!/bin/sh
+# tool_cli bootstrap installer
+#
+# Usage:
+#   curl -fsSL {{.BaseURL}}/install_tool_cli | sh
+#
+# Environment:
+#   DEST  install path (default: /usr/local/bin/tool_cli).
+#         Set to a user-writable path to avoid sudo, e.g.
+#           ... | DEST=$HOME/.local/bin/tool_cli sh
+#
+# After install the script auto-runs 'tool_cli set-url {{.BaseURL}}',
+# so the client is ready to use immediately.
+
 set -eu
 
 DEST="${DEST:-/usr/local/bin/tool_cli}"

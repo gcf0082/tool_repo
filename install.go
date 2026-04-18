@@ -20,7 +20,14 @@ const rootHelp = `tool_repo — simple tool distribution
 Endpoints:
   /get_tool          — download a package             (curl /get_tool          for details)
   /install_tool      — one-line install script        (curl /install_tool      for details)
-  /install_tool_cli  — bootstrap the tool_cli client  (pipe to sh to install)
+  /install_tool_cli  — bootstrap the tool_cli client  (curl | sh to install;
+                                                       default DEST=/usr/local/bin/tool_cli,
+                                                       override with DEST=...)
+
+Quick start (as a new client):
+  curl -fsSL http://HOST/install_tool_cli | sh
+  tool_cli ping
+  tool_cli install <name>
 `
 
 const getHelp = `GET /get_tool?name=<n>[&os=<os>&arch=<arch>][&version=<v>]
@@ -38,15 +45,20 @@ Notes:
   - Without os/arch, only platform-agnostic artifacts are considered.
   - Response carries Content-Disposition with the original filename.
 
-Examples:
+Examples (raw curl):
   curl 'http://HOST/get_tool?name=ripgrep&os=linux&arch=amd64' -OJ
   curl 'http://HOST/get_tool?name=mytool' -OJ
+
+Or using the tool_cli client (os/arch auto-detected):
+  tool_cli get ripgrep
+  tool_cli get ripgrep --version 14.1.0
 `
 
 const installHelp = `GET /install_tool?name=<n>
 
 Return a shell script that detects this host's os/arch via uname and
-downloads the package into the current directory. Pipe to 'sh' to run.
+downloads the named package into the current directory. Pipe to 'sh'
+to run.
 
 Parameters:
   name  (required) package name
@@ -54,6 +66,9 @@ Parameters:
 Notes:
   - Installs into $PWD; does not touch ~/.local/bin or /usr/local/bin.
   - Archives (.tar.gz/.zip/...) are downloaded but not extracted.
+  - For installing the tool_cli client itself, use /install_tool_cli
+    (which defaults to /usr/local/bin/tool_cli and auto-configures
+    the server URL).
 
 Example:
   curl -fsSL 'http://HOST/install_tool?name=ripgrep' | sh
