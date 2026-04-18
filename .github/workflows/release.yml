@@ -44,6 +44,14 @@ jobs:
         run: |
           title="${TITLE:-$TAG}"
           notes="${NOTES:-Automated release built from commit ${GITHUB_SHA::7} via workflow run ${GITHUB_RUN_ID}.}"
+
+          # Overwrite any existing release + tag for this version so re-running
+          # the workflow with the same tag refreshes the artifacts.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "existing release $TAG — deleting before recreate"
+            gh release delete "$TAG" --yes --cleanup-tag
+          fi
+
           gh release create "$TAG" \
             --title "$title" \
             --notes "$notes" \
