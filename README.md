@@ -62,7 +62,7 @@ go run . -dir ./packages -host 0.0.0.0 -port 8080
 ## 构建
 
 ```bash
-./build.sh    # 交叉编译 5 个平台到 dist/
+./dist.sh    # 交叉编译 5 个平台到 dist/
 ```
 
 ## 测试

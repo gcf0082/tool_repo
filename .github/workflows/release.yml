@@ -1,0 +1,51 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v0.1.0)'
+        required: true
+        type: string
+      title:
+        description: 'Release title (optional; defaults to tag)'
+        required: false
+        type: string
+      notes:
+        description: 'Release notes (optional)'
+        required: false
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+          cache: true
+
+      - name: Build artifacts
+        run: ./dist.sh
+
+      - name: List artifacts
+        run: ls -lh dist/
+
+      - name: Create release and upload artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+          TITLE: ${{ inputs.title }}
+          NOTES: ${{ inputs.notes }}
+        run: |
+          title="${TITLE:-$TAG}"
+          notes="${NOTES:-Automated release built from commit ${GITHUB_SHA::7} via workflow run ${GITHUB_RUN_ID}.}"
+          gh release create "$TAG" \
+            --title "$title" \
+            --notes "$notes" \
+            --target "$GITHUB_SHA" \
+            dist/*
