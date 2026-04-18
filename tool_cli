@@ -68,12 +68,15 @@ Commands:
   config                            Show current config
   url                               Print the configured URL
   ping                              Check connectivity to the configured server
-  get <name> [options]              Download a package into the current dir
+  get <name> [options]              Download a package
     options:
       --version, -v <v>             Exact version (default: latest)
       --os <os>                     Override os (default: detected via uname)
       --arch <arch>                 Override arch (default: detected via uname)
-  install <name>                    Download + install into current dir (pipe|sh)
+      --dir, -d <path>              Target directory (default: current dir)
+  install <name> [options]          Download + install (pipe|sh)
+    options:
+      --dir, -d <path>              Install directory (default: current dir)
   help                              Show this message
 
 Environment:
@@ -117,16 +120,18 @@ case "$cmd" in
     fi
     ;;
   get)
-    [[ $# -ge 1 ]] || { echo "usage: tool_cli get <name> [--version V] [--os X --arch Y]" >&2; exit 2; }
+    [[ $# -ge 1 ]] || { echo "usage: tool_cli get <name> [--version V] [--os X --arch Y] [--dir DIR]" >&2; exit 2; }
     name="$1"; shift
     version=""
     os="$(detect_os)"
     arch="$(detect_arch)"
+    dir=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --version|-v) version="$2"; shift 2 ;;
         --os)         os="$2"; shift 2 ;;
         --arch)       arch="$2"; shift 2 ;;
+        --dir|-d)     dir="$2"; shift 2 ;;
         *) echo "unknown arg: $1" >&2; exit 2 ;;
       esac
     done
@@ -134,12 +139,34 @@ case "$cmd" in
     url="${base}/get_tool?name=${name}&os=${os}&arch=${arch}"
     [[ -n "$version" ]] && url="${url}&version=${version}"
     echo "GET $url" >&2
-    curl -fSL -OJ "$url"
+    if [[ -n "$dir" ]]; then
+      mkdir -p "$dir"
+      (cd "$dir" && curl -fSL -OJ "$url")
+    else
+      curl -fSL -OJ "$url"
+    fi
     ;;
   install)
-    [[ $# -eq 1 ]] || { echo "usage: tool_cli install <name>" >&2; exit 2; }
+    [[ $# -ge 1 ]] || { echo "usage: tool_cli install <name> [--dir DIR]" >&2; exit 2; }
+    name=""; dir=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --dir|-d) dir="$2"; shift 2 ;;
+        -*) echo "unknown arg: $1" >&2; exit 2 ;;
+        *)
+          [[ -z "$name" ]] || { echo "unexpected positional: $1" >&2; exit 2; }
+          name="$1"; shift
+          ;;
+      esac
+    done
+    [[ -n "$name" ]] || { echo "usage: tool_cli install <name> [--dir DIR]" >&2; exit 2; }
     base="$(require_url)"
-    curl -fsSL "${base}/install_tool?name=$1" | sh
+    if [[ -n "$dir" ]]; then
+      mkdir -p "$dir"
+      (cd "$dir" && curl -fsSL "${base}/install_tool?name=${name}" | sh)
+    else
+      curl -fsSL "${base}/install_tool?name=${name}" | sh
+    fi
     ;;
   *)
     echo "unknown command: $cmd" >&2

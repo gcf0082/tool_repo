@@ -288,6 +288,32 @@ dl_tmp="$(mktemp -d)"
 )
 rm -rf "$dl_tmp"
 
+# install with --dir installs into that dir (which may not exist yet)
+TARGET_DIR="$(mktemp -d)/bin"
+if ./tool_cli install fzf --dir "$TARGET_DIR" >/dev/null 2>&1; then
+  if [[ -x "$TARGET_DIR/fzf" && "$(cat "$TARGET_DIR/fzf")" == "fzf-binary" ]]; then
+    ok "tool_cli install fzf --dir $TARGET_DIR"
+  else
+    ko "tool_cli install --dir wrong file: $(ls "$TARGET_DIR" 2>&1)"
+  fi
+else
+  ko "tool_cli install --dir command failed"
+fi
+rm -rf "$(dirname "$TARGET_DIR")"
+
+# get with --dir downloads into that dir (creating if needed)
+TARGET_DIR="$(mktemp -d)/downloads"
+if ./tool_cli get fzf --os linux --arch amd64 --dir "$TARGET_DIR" >/dev/null 2>&1; then
+  if [[ -f "$TARGET_DIR/linux-amd64" && "$(cat "$TARGET_DIR/linux-amd64")" == "fzf-binary" ]]; then
+    ok "tool_cli get fzf --dir $TARGET_DIR"
+  else
+    ko "tool_cli get --dir wrong file: $(ls "$TARGET_DIR" 2>&1)"
+  fi
+else
+  ko "tool_cli get --dir command failed"
+fi
+rm -rf "$(dirname "$TARGET_DIR")"
+
 # TOOL_CLI_URL env override works even without config
 rm -rf "$CLI_HOME/.tool_cli"
 cli_url_env="$(TOOL_CLI_URL="$BASE" ./tool_cli url)"

@@ -128,11 +128,13 @@ tool_cli url                           # 打印当前配置的 URL
 tool_cli set-url http://host:8080      # 如果引导时没自动配
 tool_cli ping                          # 测试与服务端是否连通
 
-tool_cli get fzf                       # 下载到当前目录；os/arch 自动 uname 推断
+tool_cli get fzf                                 # 下载到当前目录；os/arch 自动 uname 推断
 tool_cli get ripgrep --version 14.1.0
 tool_cli get mytool --os darwin --arch arm64
+tool_cli get fzf --dir ~/Downloads               # 下到指定目录（不存在会自动创建）
 
-tool_cli install fzf                   # 等价于 curl /install_tool?name=fzf | sh
+tool_cli install fzf                             # 等价于 curl /install_tool?name=fzf | sh
+tool_cli install fzf --dir /usr/local/bin        # 装到指定目录（需要写权限；否则用 sudo）
 
 # 单次覆盖 URL 不改配置
 TOOL_CLI_URL=http://other:9090 tool_cli install fzf
