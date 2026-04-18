@@ -20,8 +20,7 @@ const rootHelp = `tool_repo — simple tool distribution
 Endpoints:
   /get_tool          — download a package             (curl /get_tool          for details)
   /install_tool      — one-line install script        (curl /install_tool      for details)
-  /install_tool_cli         — bootstrap the tool_cli client (curl | sh to install)
-  /install_tool_cli?help    — detailed description of the bootstrap endpoint
+  /install_tool_cli  — bootstrap the tool_cli client  (curl | sh to install)
 
 Quick start (as a new client):
   curl -fsSL http://HOST/install_tool_cli | sh
@@ -73,34 +72,6 @@ Example:
   curl -fsSL 'http://HOST/install_tool?name=ripgrep' | sh
 `
 
-const installCLIHelp = `GET /install_tool_cli
-
-Return a shell script that installs the tool_cli client (a bash wrapper
-around curl for this server). Unlike /install_tool, this endpoint takes
-no parameters — the client is the same for every caller.
-
-Behavior:
-  - Writes the tool_cli script into $DEST (default /usr/local/bin/tool_cli)
-  - Uses sudo automatically if the target directory is not writable
-  - Auto-runs 'tool_cli set-url <URL>' using the URL the caller used
-    to reach the server (derived from Host + X-Forwarded-* headers),
-    so the client is pre-configured and ready to use
-
-Environment override (passed through '| DEST=... sh'):
-  DEST  install path; set to a user-writable location to avoid sudo,
-        e.g. DEST=$HOME/.local/bin/tool_cli
-
-Examples:
-  curl -fsSL 'http://HOST/install_tool_cli' | sh
-  curl -fsSL 'http://HOST/install_tool_cli' | DEST=$HOME/.local/bin/tool_cli sh
-
-To read the script itself (help is embedded as a comment header):
-  curl 'http://HOST/install_tool_cli'
-
-To read this help doc:
-  curl 'http://HOST/install_tool_cli?help'
-`
-
 var installTemplate = template.Must(template.New("install").Parse(installTmpl))
 var installCLITemplate = template.Must(template.New("install_cli").Parse(installCLITmpl))
 
@@ -138,10 +109,6 @@ func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInstallCLI(w http.ResponseWriter, r *http.Request) {
-	if _, ok := r.URL.Query()["help"]; ok {
-		writeHelp(w, installCLIHelp)
-		return
-	}
 	base := publicBaseURL(r)
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	_ = installCLITemplate.Execute(w, struct {

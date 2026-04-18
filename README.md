@@ -46,7 +46,7 @@ packages/
 | `GET /` | 返回总览帮助 | — |
 | `GET /get_tool?name=<n>[&os=&arch=&version=]` | 返回 `/get_tool` 的详细帮助 | 下载对应包 |
 | `GET /install_tool?name=<n>` | 返回 `/install_tool` 的详细帮助 | 返回定制安装脚本 |
-| `GET /install_tool_cli` | 返回 `tool_cli` 引导脚本（脚本顶部注释即简版帮助）；加 `?help` 返回完整说明 | 同左 |
+| `GET /install_tool_cli` | 永远返回 `tool_cli` 引导脚本；脚本顶部注释即用法说明 | 同左 |
 
 ### 解析规则
 

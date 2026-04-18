@@ -347,14 +347,6 @@ else
   ko "install_tool_cli default DEST missing /usr/local/bin/tool_cli"
 fi
 
-# ?help returns plain-text help, not the script
-help_body="$(curl -sS "${BASE}/install_tool_cli?help")"
-help_ct="$(curl -sSI "${BASE}/install_tool_cli?help" | awk 'BEGIN{IGNORECASE=1} tolower($1)=="content-type:"{sub(/\r$/,""); sub(/^[^:]*: */,""); print; exit}')"
-if [[ "$help_ct" == text/plain* ]] && [[ "$help_body" == *"GET /install_tool_cli"* ]] && [[ "$help_body" != *"__TOOL_CLI_EOF__"* ]]; then
-  ok "install_tool_cli?help returns help doc (text/plain)"
-else
-  ko "install_tool_cli?help wrong; ct=$help_ct body-prefix=${help_body:0:80}"
-fi
 rm -rf "$boot_tmp" "$HOME"
 export HOME="/root"
 
