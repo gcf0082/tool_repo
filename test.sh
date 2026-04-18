@@ -213,6 +213,94 @@ tmp="$(mktemp -d)"
 )
 rm -rf "$tmp"
 
+# ---- tool_cli scenario ----
+log "== tool_cli =="
+CLI_HOME="$(mktemp -d)"
+trap 'rm -rf "$CLI_HOME"' RETURN 2>/dev/null || true
+export HOME="$CLI_HOME"
+
+# set-url writes config
+if ./tool_cli set-url "$BASE" >/dev/null; then
+  ok "tool_cli set-url"
+else
+  ko "tool_cli set-url failed"
+fi
+
+# config file has the url
+if [[ -f "$CLI_HOME/.tool_cli/config.json" ]] && grep -q "\"url\": \"$BASE\"" "$CLI_HOME/.tool_cli/config.json"; then
+  ok "config.json written with url=$BASE"
+else
+  ko "config.json missing or wrong: $(cat $CLI_HOME/.tool_cli/config.json 2>&1)"
+fi
+
+# url command reads it back
+cli_url="$(./tool_cli url)"
+if [[ "$cli_url" == "$BASE" ]]; then
+  ok "tool_cli url -> $cli_url"
+else
+  ko "tool_cli url -> $cli_url (want $BASE)"
+fi
+
+# get downloads fzf
+dl_tmp="$(mktemp -d)"
+(
+  cd "$dl_tmp"
+  if "$OLDPWD/tool_cli" get fzf --os linux --arch amd64 >/dev/null 2>&1; then
+    if [[ -f ./linux-amd64 && "$(cat ./linux-amd64)" == "fzf-binary" ]]; then
+      ok "tool_cli get fzf downloaded correct file"
+    else
+      ko "tool_cli get fzf wrong file: $(ls)"
+    fi
+  else
+    ko "tool_cli get fzf command failed"
+  fi
+)
+rm -rf "$dl_tmp"
+
+# get with explicit version (ripgrep 14.0.3)
+dl_tmp="$(mktemp -d)"
+(
+  cd "$dl_tmp"
+  if "$OLDPWD/tool_cli" get ripgrep --os linux --arch amd64 --version 14.0.3 >/dev/null 2>&1; then
+    if [[ -f ./linux-amd64.tar.gz && "$(cat ./linux-amd64.tar.gz)" == "rg-14.0.3-linux" ]]; then
+      ok "tool_cli get ripgrep --version 14.0.3"
+    else
+      ko "tool_cli get ripgrep pinned-version wrong file"
+    fi
+  else
+    ko "tool_cli get ripgrep --version failed"
+  fi
+)
+rm -rf "$dl_tmp"
+
+# install runs pipe|sh
+dl_tmp="$(mktemp -d)"
+(
+  cd "$dl_tmp"
+  if "$OLDPWD/tool_cli" install fzf >/dev/null 2>&1; then
+    if [[ -x ./fzf && "$(cat ./fzf)" == "fzf-binary" ]]; then
+      ok "tool_cli install fzf produced executable ./fzf"
+    else
+      ko "tool_cli install fzf wrong file: $(ls)"
+    fi
+  else
+    ko "tool_cli install fzf command failed"
+  fi
+)
+rm -rf "$dl_tmp"
+
+# TOOL_CLI_URL env override works even without config
+rm -rf "$CLI_HOME/.tool_cli"
+cli_url_env="$(TOOL_CLI_URL="$BASE" ./tool_cli url)"
+if [[ "$cli_url_env" == "$BASE" ]]; then
+  ok "TOOL_CLI_URL env override"
+else
+  ko "TOOL_CLI_URL env override: got $cli_url_env"
+fi
+
+rm -rf "$CLI_HOME"
+unset HOME; export HOME="/root"   # restore so nothing else breaks
+
 log ""
 log "== summary: ${pass} passed, ${fail} failed =="
 [[ $fail -eq 0 ]]

@@ -1,0 +1,135 @@
+#!/usr/bin/env bash
+# tool_cli — thin client wrapper around curl for a tool_repo server.
+# Config: ~/.tool_cli/config.json  (key: "url")
+# Override for a single call: TOOL_CLI_URL=... tool_cli ...
+set -euo pipefail
+
+CONFIG_DIR="${HOME}/.tool_cli"
+CONFIG_FILE="${CONFIG_DIR}/config.json"
+
+read_url() {
+  if [[ -n "${TOOL_CLI_URL:-}" ]]; then
+    printf '%s' "$TOOL_CLI_URL"
+    return
+  fi
+  [[ -f "$CONFIG_FILE" ]] || return 0
+  python3 - "$CONFIG_FILE" <<'PY'
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        print(json.load(f).get("url", ""), end="")
+except Exception:
+    pass
+PY
+}
+
+write_url() {
+  mkdir -p "$CONFIG_DIR"
+  python3 - "$CONFIG_FILE" "$1" <<'PY'
+import json, sys
+path, url = sys.argv[1], sys.argv[2]
+with open(path, "w") as f:
+    json.dump({"url": url}, f, indent=2)
+PY
+  echo "saved url=$1 to $CONFIG_FILE"
+}
+
+require_url() {
+  local u
+  u="$(read_url)"
+  if [[ -z "$u" ]]; then
+    echo "no server URL configured. run: tool_cli set-url <url>" >&2
+    exit 1
+  fi
+  printf '%s' "$u"
+}
+
+detect_os() {
+  case "$(uname -s)" in
+    Linux)  echo linux ;;
+    Darwin) echo darwin ;;
+    *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
+  esac
+}
+detect_arch() {
+  case "$(uname -m)" in
+    x86_64|amd64)  echo amd64 ;;
+    aarch64|arm64) echo arm64 ;;
+    *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+  esac
+}
+
+usage() {
+  cat <<'EOF'
+tool_cli — client wrapper for tool_repo
+
+Commands:
+  set-url <url>                     Save server URL to ~/.tool_cli/config.json
+  config                            Show current config
+  url                               Print the configured URL
+  get <name> [options]              Download a package into the current dir
+    options:
+      --version, -v <v>             Exact version (default: latest)
+      --os <os>                     Override os (default: detected via uname)
+      --arch <arch>                 Override arch (default: detected via uname)
+  install <name>                    Download + install into current dir (pipe|sh)
+  help                              Show this message
+
+Environment:
+  TOOL_CLI_URL=<url>                Override the configured URL for one call
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "$cmd" in
+  help|-h|--help)
+    usage
+    ;;
+  set-url)
+    [[ $# -eq 1 ]] || { echo "usage: tool_cli set-url <url>" >&2; exit 2; }
+    write_url "$1"
+    ;;
+  config)
+    if [[ -f "$CONFIG_FILE" ]]; then
+      cat "$CONFIG_FILE"
+    else
+      echo "(no config at $CONFIG_FILE)"
+    fi
+    ;;
+  url)
+    u="$(read_url)"
+    [[ -n "$u" ]] && echo "$u" || { echo "(unset)"; exit 1; }
+    ;;
+  get)
+    [[ $# -ge 1 ]] || { echo "usage: tool_cli get <name> [--version V] [--os X --arch Y]" >&2; exit 2; }
+    name="$1"; shift
+    version=""
+    os="$(detect_os)"
+    arch="$(detect_arch)"
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --version|-v) version="$2"; shift 2 ;;
+        --os)         os="$2"; shift 2 ;;
+        --arch)       arch="$2"; shift 2 ;;
+        *) echo "unknown arg: $1" >&2; exit 2 ;;
+      esac
+    done
+    base="$(require_url)"
+    url="${base}/get_tool?name=${name}&os=${os}&arch=${arch}"
+    [[ -n "$version" ]] && url="${url}&version=${version}"
+    echo "GET $url" >&2
+    curl -fSL -OJ "$url"
+    ;;
+  install)
+    [[ $# -eq 1 ]] || { echo "usage: tool_cli install <name>" >&2; exit 2; }
+    base="$(require_url)"
+    curl -fsSL "${base}/install_tool?name=$1" | sh
+    ;;
+  *)
+    echo "unknown command: $cmd" >&2
+    usage >&2
+    exit 2
+    ;;
+esac

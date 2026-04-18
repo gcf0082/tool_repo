@@ -78,6 +78,28 @@ tool_repo -upstream http://source-host:8080 -port 9090
 - `GET /install_tool?name=...` → 本地渲染脚本，`BASE` 指向前端节点自己；脚本回头调前端的 `/get_tool`，再被代理到上游。对最终用户而言，整个链路的入口永远是前端节点
 - `X-Forwarded-For` 会被设置，`X-Forwarded-Host`/`X-Forwarded-Proto` 不会（避免上游误把回链指向代理外主机）
 
+## 客户端工具 tool_cli
+
+`tool_cli` 是 bash 写的轻量客户端，包住 `curl` 操作，避免每次记 URL。配置放在 `~/.tool_cli/config.json`。
+
+```bash
+# 一次性配好
+./tool_cli set-url http://host:8080
+
+# 下载（os/arch 自动 uname 推断）
+./tool_cli get fzf
+./tool_cli get ripgrep --version 14.1.0
+./tool_cli get mytool --os darwin --arch arm64
+
+# 一行安装到当前目录
+./tool_cli install fzf
+
+# 单次覆盖 URL 不改配置
+TOOL_CLI_URL=http://other:9090 ./tool_cli install fzf
+```
+
+依赖：`bash`、`curl`、`python3`（只用来读写 JSON 配置）。
+
 ## 构建
 
 ```bash
