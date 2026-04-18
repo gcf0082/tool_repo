@@ -103,6 +103,34 @@ func TestInstallToolCLIEndpoint(t *testing.T) {
 	}
 }
 
+func TestInstallToolCLIHelp(t *testing.T) {
+	ts, _ := newTestServer(t)
+	defer ts.Close()
+
+	resp, body := get(t, ts.URL+"/install_tool_cli?help")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); !strings.Contains(ct, "text/plain") {
+		t.Errorf("content-type %q (want text/plain)", ct)
+	}
+	for _, want := range []string{
+		"GET /install_tool_cli",
+		"DEST",
+		"/usr/local/bin/tool_cli",
+		"set-url",
+		"sudo",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("install_tool_cli help missing %q", want)
+		}
+	}
+	// Ensure we're not accidentally returning the script
+	if strings.Contains(body, "__TOOL_CLI_EOF__") {
+		t.Error("help response leaked the script heredoc marker")
+	}
+}
+
 func TestInstallScriptUsesForwardedHost(t *testing.T) {
 	ts, _ := newTestServer(t)
 	defer ts.Close()
