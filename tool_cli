@@ -77,6 +77,9 @@ Commands:
   install <name> [options]          Download + install (pipe|sh)
     options:
       --dir, -d <path>              Install directory (default: current dir)
+  run remote://<path> [args...]     Execute a remote shell script via pipe
+                                    (args are passed to the script's $@)
+  push <local> remote://<path>      Upload a local file to scripts/<path>
   help                              Show this message
 
 Environment:
@@ -145,6 +148,36 @@ case "$cmd" in
     else
       curl -fSL -OJ "$url"
     fi
+    ;;
+  run)
+    [[ $# -ge 1 ]] || { echo "usage: tool_cli run remote://<path> [args...]" >&2; exit 2; }
+    target="$1"; shift
+    case "$target" in
+      remote://*) path="${target#remote://}" ;;
+      *) echo "tool_cli run: target must start with remote:// (got: $target)" >&2; exit 2 ;;
+    esac
+    case "$path" in
+      ""|/*|*..*) echo "bad path: $path" >&2; exit 2 ;;
+    esac
+    base="$(require_url)"
+    # pipefail is already set at the top of this script so curl 4xx/5xx
+    # causes the whole pipeline to exit non-zero. "--" terminates sh's
+    # option parsing so script args starting with '-' are safe.
+    curl -fsSL "${base}/get_script?path=${path}" | sh -s -- "$@"
+    ;;
+  push)
+    [[ $# -eq 2 ]] || { echo "usage: tool_cli push <local> remote://<path>" >&2; exit 2; }
+    local="$1"; target="$2"
+    [[ -f "$local" ]] || { echo "not a file: $local" >&2; exit 2; }
+    case "$target" in
+      remote://*) path="${target#remote://}" ;;
+      *) echo "tool_cli push: target must start with remote:// (got: $target)" >&2; exit 2 ;;
+    esac
+    case "$path" in
+      ""|/*|*..*) echo "bad path: $path" >&2; exit 2 ;;
+    esac
+    base="$(require_url)"
+    curl -fsSL -T "$local" "${base}/put_script?path=${path}"
     ;;
   install)
     [[ $# -ge 1 ]] || { echo "usage: tool_cli install <name> [--dir DIR]" >&2; exit 2; }

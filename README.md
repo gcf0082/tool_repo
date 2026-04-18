@@ -47,6 +47,8 @@ packages/
 | `GET /get_tool?name=<n>[&os=&arch=&version=]` | 返回 `/get_tool` 的详细帮助 | 下载对应包 |
 | `GET /install_tool?name=<n>` | 返回 `/install_tool` 的详细帮助 | 返回定制安装脚本 |
 | `GET /install_tool_cli` | 永远返回 `tool_cli` 引导脚本；脚本顶部注释即用法说明 | 同左 |
+| `GET /get_script?path=<p>` | 返回 `/get_script` 的详细帮助 | 读 `scripts/<p>` 原始内容 |
+| `PUT /put_script?path=<p>` (body=脚本) | 返回 `/put_script` 的详细帮助 | 写入 `scripts/<p>`（父目录自动建，同名覆盖） |
 
 ### 解析规则
 
@@ -77,10 +79,11 @@ tool_repo -dir ./packages -host 0.0.0.0 -port 8080
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
-| `-dir` | `./packages` | 数据目录（`-upstream` 模式下忽略） |
+| `-dir` | `./packages` | packages 数据目录（`-upstream` 模式下忽略） |
+| `-scripts` | `./scripts` | scripts 目录（可选；不存在就禁用 `/get_script`/`/put_script`；`-upstream` 模式下忽略） |
 | `-host` | `0.0.0.0` | 绑定 IP |
 | `-port` | `8080` | 监听端口 |
-| `-upstream` | *(空)* | 若设置则进入转发模式，不再要求 `-dir`；值形如 `http://other:8080` |
+| `-upstream` | *(空)* | 若设置则进入转发模式，不再要求 `-dir`/`-scripts`；值形如 `http://other:8080` |
 
 ## 转发模式（类 nginx 反代）
 
@@ -136,11 +139,51 @@ tool_cli get fzf --dir ~/Downloads               # 下到指定目录（不存�
 tool_cli install fzf                             # 等价于 curl /install_tool?name=fzf | sh
 tool_cli install fzf --dir /usr/local/bin        # 装到指定目录（需要写权限；否则用 sudo）
 
+tool_cli run remote://deploy.sh myapp prod       # 流式执行远端脚本，args 传给 $@
+tool_cli push ./local.sh remote://my/local.sh    # 上传本地脚本到服务端 scripts/my/local.sh
+
 # 单次覆盖 URL 不改配置
 TOOL_CLI_URL=http://other:9090 tool_cli install fzf
 ```
 
 依赖：`bash`、`curl`、`python3`（只用来读写 JSON 配置）。
+
+## 远端脚本：执行 / 上传
+
+服务端有个 `scripts/` 目录（和 `packages/` 并列），支持多级嵌套：
+
+```
+scripts/
+├── hello.sh
+└── deploy/
+    ├── staging.sh
+    └── prod.sh
+```
+
+### 执行（流式 pipe，不落盘）
+
+```bash
+tool_cli run remote://deploy/prod.sh v1.2.0           # args 透传给脚本的 $@
+curl -fsSL 'http://host:8080/get_script?path=deploy/prod.sh' | sh -s -- v1.2.0
+```
+
+参数传递链路：`tool_cli → curl → sh -s -- args → 脚本($1...$@)`。`--` 防止 `-xxx` 参数被 sh 误解析；`set -o pipefail` 保证 curl 4xx/5xx 时整条命令非零退出。stdin 被管道占用，脚本内不能 `read` 交互输入。
+
+### 上传
+
+```bash
+# 裸 curl
+curl -T ./local.sh 'http://host:8080/put_script?path=deploy/prod.sh'
+
+# 或用 tool_cli
+tool_cli push ./local.sh remote://deploy/prod.sh
+```
+
+父目录自动 mkdir；同名覆盖（201 Created / 200 OK）；body 上限 16 MiB。
+
+### ⚠️ 鉴权提示
+
+`/put_script` 当前**无鉴权**。任何能访问该端点的人都能让运行 `tool_cli run` 的机器执行任意 shell。仅在内网/可信环境部署，或自己在前面套反向代理/网络 ACL。token 鉴权列在下一轮路线。
 
 ## 构建
 

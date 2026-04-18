@@ -78,7 +78,7 @@ log "== build =="
 go build -o ./tool_repo . || { log "build failed"; exit 1; }
 
 log "== start server on ${HOST}:${PORT} =="
-./tool_repo -host "$HOST" -port "$PORT" -dir "$DATA_DIR" >"$LOG" 2>&1 &
+./tool_repo -host "$HOST" -port "$PORT" -dir "$DATA_DIR" -scripts ./testdata/scripts >"$LOG" 2>&1 &
 PID=$!
 
 for _ in {1..30}; do
@@ -337,10 +337,98 @@ else
   ok "tool_cli ping failed as expected against unreachable URL"
 fi
 
+# run: execute a remote script with args → stdout contains the expected text
+run_out="$(TOOL_CLI_URL="$BASE" ./tool_cli run remote://hello.sh foo "bar baz" 2>&1 || true)"
+if [[ "$run_out" == *"hello foo bar baz"* ]]; then
+  ok "tool_cli run remote://hello.sh passes args"
+else
+  ko "tool_cli run args wrong: $run_out"
+fi
+
+# run: missing remote:// prefix → non-zero exit
+if TOOL_CLI_URL="$BASE" ./tool_cli run notremote://x.sh >/dev/null 2>&1; then
+  ko "tool_cli run should reject missing remote:// prefix"
+else
+  ok "tool_cli run rejects non-remote:// target"
+fi
+
+# run: 404 path → pipefail makes tool_cli non-zero
+if TOOL_CLI_URL="$BASE" ./tool_cli run remote://nope.sh >/dev/null 2>&1; then
+  ko "tool_cli run should fail on 404"
+else
+  ok "tool_cli run exits non-zero on HTTP 404 (pipefail)"
+fi
+
+# push: upload then run
+PUSH_LOCAL="$(mktemp)"
+printf '#!/bin/sh\necho "pushed-by-cli $@"\n' > "$PUSH_LOCAL"
+if TOOL_CLI_URL="$BASE" ./tool_cli push "$PUSH_LOCAL" remote://pushed-by-cli/y.sh >/dev/null 2>&1; then
+  ok "tool_cli push uploaded y.sh"
+else
+  ko "tool_cli push failed"
+fi
+run_out2="$(TOOL_CLI_URL="$BASE" ./tool_cli run remote://pushed-by-cli/y.sh alpha 2>&1 || true)"
+if [[ "$run_out2" == *"pushed-by-cli alpha"* ]]; then
+  ok "tool_cli run picks up pushed script"
+else
+  ko "pushed script run wrong: $run_out2"
+fi
+rm -f "$PUSH_LOCAL"
+rm -rf ./testdata/scripts/uploaded ./testdata/scripts/pushed-by-cli
+
 rm -rf "$CLI_HOME"
 unset HOME; export HOME="/root"
 
 # ---- /install_tool_cli bootstrap ----
+log "== get_script =="
+assert_status        "/get_script?path=hello.sh" 200
+assert_body_contains "/get_script?path=hello.sh" '#!/bin/sh'
+assert_body_contains "/get_script?path=hello.sh" 'hello $@'
+assert_header        "/get_script?path=hello.sh" "Content-Type" "application/x-shellscript; charset=utf-8"
+assert_status        "/get_script?path=deploy/staging.sh" 200
+assert_status        "/get_script?path=../etc/passwd" 400
+assert_status        "/get_script?path=/abs" 400
+assert_status        "/get_script?path=nope.sh" 404
+assert_status        "/get_script" 200  # help
+assert_body_contains "/get_script" "GET /get_script"
+
+log "== put_script via curl -T =="
+TMP_SH="$(mktemp)"
+printf '#!/bin/sh\necho "pushed $@"\n' > "$TMP_SH"
+
+# Create (201)
+code=$(curl -sS -o /dev/null -w '%{http_code}' -T "$TMP_SH" "${BASE}/put_script?path=uploaded/x.sh")
+if [[ "$code" == "201" ]]; then
+  ok "PUT /put_script?path=uploaded/x.sh -> 201 (create)"
+else
+  ko "PUT /put_script create wrong status: $code"
+fi
+
+# Readback
+assert_status        "/get_script?path=uploaded/x.sh" 200
+assert_body_contains "/get_script?path=uploaded/x.sh" "pushed"
+
+# Overwrite (200)
+code=$(curl -sS -o /dev/null -w '%{http_code}' -T "$TMP_SH" "${BASE}/put_script?path=uploaded/x.sh")
+if [[ "$code" == "200" ]]; then
+  ok "PUT /put_script?path=uploaded/x.sh -> 200 (overwrite)"
+else
+  ko "PUT /put_script overwrite wrong status: $code"
+fi
+
+# Bad path → 400
+code=$(curl -sS -o /dev/null -w '%{http_code}' -T "$TMP_SH" "${BASE}/put_script?path=../evil")
+if [[ "$code" == "400" ]]; then
+  ok "PUT /put_script?path=../evil -> 400"
+else
+  ko "PUT /put_script bad-path wrong status: $code"
+fi
+
+rm -f "$TMP_SH"
+
+# Clean up uploaded/ so repeated runs start clean
+rm -rf ./testdata/scripts/uploaded ./testdata/scripts/pushed-by-cli
+
 log "== install_tool_cli bootstrap =="
 boot_tmp="$(mktemp -d)"
 export HOME="$(mktemp -d)"

@@ -21,6 +21,8 @@ Endpoints:
   /get_tool          — download a package             (curl /get_tool          for details)
   /install_tool      — one-line install script        (curl /install_tool      for details)
   /install_tool_cli  — bootstrap the tool_cli client  (curl | sh to install)
+  /get_script        — read a shell script from scripts/<path>
+  /put_script        — upload a shell script to scripts/<path>  (PUT, curl -T)
 
 Quick start (as a new client):
   curl -fsSL http://HOST/install_tool_cli | sh

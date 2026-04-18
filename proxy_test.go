@@ -16,11 +16,16 @@ func newUpstream(t *testing.T) *httptest.Server {
 	root := t.TempDir()
 	writeFile(t, root, "fzf/linux-amd64", "fzf-bin-from-upstream")
 
-	s := &Server{Root: root}
+	scriptsRoot := t.TempDir()
+	writeFile(t, scriptsRoot, "hello.sh", "#!/bin/sh\necho hello-upstream\n")
+
+	s := &Server{Root: root, ScriptsRoot: scriptsRoot}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleRootHelp)
 	mux.HandleFunc("GET /get_tool", s.handleGet)
 	mux.HandleFunc("GET /install_tool", s.handleInstall)
+	mux.HandleFunc("GET /get_script", s.handleGetScript)
+	mux.HandleFunc("PUT /put_script", s.handlePutScript)
 	return httptest.NewServer(mux)
 }
 
@@ -35,6 +40,8 @@ func newForwarder(t *testing.T, upstreamURL string) *httptest.Server {
 	mux.HandleFunc("GET /{$}", s.handleRootHelp)
 	mux.HandleFunc("GET /get_tool", s.handleGet)
 	mux.HandleFunc("GET /install_tool", s.handleInstall)
+	mux.HandleFunc("GET /get_script", s.handleGetScript)
+	mux.HandleFunc("PUT /put_script", s.handlePutScript)
 	return httptest.NewServer(mux)
 }
 
@@ -108,6 +115,45 @@ func TestProxyInstallScriptPointsAtForwarder(t *testing.T) {
 	}
 	if !strings.Contains(body, `BASE="`+fw.URL+`"`) {
 		t.Errorf("script BASE should be forwarder %s; got body:\n%s", fw.URL, body)
+	}
+}
+
+func TestProxyGetScriptPassesThrough(t *testing.T) {
+	up := newUpstream(t)
+	defer up.Close()
+	fw := newForwarder(t, up.URL)
+	defer fw.Close()
+
+	resp, body := get(t, fw.URL+"/get_script?path=hello.sh")
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	if !strings.Contains(body, "echo hello-upstream") {
+		t.Errorf("body %q", body)
+	}
+}
+
+func TestProxyPutScriptPassesThrough(t *testing.T) {
+	up := newUpstream(t)
+	defer up.Close()
+	fw := newForwarder(t, up.URL)
+	defer fw.Close()
+
+	body := "#!/bin/sh\necho pushed\n"
+	req, _ := http.NewRequest("PUT", fw.URL+"/put_script?path=pushed.sh", strings.NewReader(body))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 201 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+
+	// Read it back through the forwarder — should come from the upstream disk
+	resp2, body2 := get(t, fw.URL+"/get_script?path=pushed.sh")
+	if resp2.StatusCode != 200 || !strings.Contains(body2, "echo pushed") {
+		t.Errorf("readback status=%d body=%q", resp2.StatusCode, body2)
 	}
 }
 

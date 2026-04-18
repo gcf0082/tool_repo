@@ -12,9 +12,10 @@ import (
 )
 
 type Server struct {
-	Root     string
-	Upstream *url.URL
-	Proxy    *httputil.ReverseProxy
+	Root        string
+	ScriptsRoot string
+	Upstream    *url.URL
+	Proxy       *httputil.ReverseProxy
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
