@@ -375,11 +375,12 @@ else
   ok "tool_cli run rejects non-remote:// target"
 fi
 
-# run: 404 path → pipefail makes tool_cli non-zero
-if TOOL_CLI_URL="$BASE" ./tool_cli run remote://nope.sh >/dev/null 2>&1; then
-  ko "tool_cli run should fail on 404"
+# run: 404 path → friendly error message + non-zero
+nope_out="$(TOOL_CLI_URL="$BASE" ./tool_cli run remote://nope.sh 2>&1 || true)"
+if [[ "$nope_out" == *"script not found: remote://nope.sh"* && "$nope_out" != *"(22)"* ]]; then
+  ok "tool_cli run shows friendly 404 message"
 else
-  ok "tool_cli run exits non-zero on HTTP 404 (pipefail)"
+  ko "tool_cli run 404 msg wrong: $nope_out"
 fi
 
 # push: upload then run

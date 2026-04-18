@@ -154,10 +154,21 @@ case "$cmd" in
       ""|/*|*..*) echo "bad path: $path" >&2; exit 2 ;;
     esac
     base="$(require_url)"
-    # pipefail is already set at the top of this script so curl 4xx/5xx
-    # causes the whole pipeline to exit non-zero. "--" terminates sh's
-    # option parsing so script args starting with '-' are safe.
-    curl -fsSL "${base}/get_script?path=${path}" | sh -s -- "$@"
+    url="${base}/get_script?path=${path}"
+    # Probe with HEAD first so we can give a human-readable error
+    # instead of curl's "(22) The requested URL returned error: 404".
+    code="$(curl -sS -I -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null || echo 000)"
+    case "$code" in
+      200) ;;
+      404) echo "tool_cli run: script not found: remote://${path}" >&2; exit 1 ;;
+      400) echo "tool_cli run: invalid script path: remote://${path}" >&2; exit 1 ;;
+      000) echo "tool_cli run: cannot reach server (${base})" >&2; exit 1 ;;
+      *)   echo "tool_cli run: server returned HTTP ${code} for remote://${path}" >&2; exit 1 ;;
+    esac
+    # Stream the body straight into sh. "--" terminates sh's option
+    # parsing so script args starting with '-' are safe. pipefail
+    # (set at the top) still catches mid-transfer failures.
+    curl -fsSL "$url" | sh -s -- "$@"
     ;;
   push)
     [[ $# -eq 2 ]] || { echo "usage: tool_cli push <local> remote://<path>" >&2; exit 2; }
