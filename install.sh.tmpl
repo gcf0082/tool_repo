@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+NAME="{{.Name}}"
+BASE="{{.BaseURL}}"
+
+case "$(uname -s)" in
+  Linux)  OS=linux ;;
+  Darwin) OS=darwin ;;
+  *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
+esac
+case "$(uname -m)" in
+  x86_64|amd64)  ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+  *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+esac
+
+URL="${BASE}/get_tool?name=${NAME}&os=${OS}&arch=${ARCH}"
+
+FNAME=$(curl -sSI "$URL" | awk 'BEGIN{IGNORECASE=1}
+  /^content-disposition:/ {
+    if (match($0, /filename="[^"]+"/)) {
+      print substr($0, RSTART+10, RLENGTH-11); exit
+    }
+  }')
+OUT="${FNAME:-$NAME}"
+
+echo "downloading $URL -> $PWD/$OUT"
+curl -fSL -o "$OUT" "$URL"
+
+case "$OUT" in
+  *.tar.gz|*.tgz|*.tar.bz2|*.tbz2|*.tar.xz|*.txz|*.zip|*.7z)
+    echo "archive saved: $PWD/$OUT (extract manually to use)"
+    ;;
+  *)
+    chmod +x "$OUT"
+    [ "$OUT" = "$NAME" ] || mv "$OUT" "$NAME"
+    echo "installed: $PWD/$NAME"
+    ;;
+esac
