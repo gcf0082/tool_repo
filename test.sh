@@ -76,6 +76,12 @@ assert_body_contains() {
 
 log "== build =="
 go build -o ./tool_repo . || { log "build failed"; exit 1; }
+go build -o ./tool_cli ./cmd/tool_cli || { log "tool_cli build failed"; exit 1; }
+
+# Publish tool_cli into testdata/packages so /install_tool_cli can find it.
+tc_pkg_dir="./testdata/packages/tool_cli/0.1.0/linux-amd64"
+mkdir -p "$tc_pkg_dir"
+tar -C "$(dirname "$(realpath ./tool_cli)")" -czf "$tc_pkg_dir/tool_cli.tar.gz" tool_cli
 
 log "== start server on ${HOST}:${PORT} =="
 ./tool_repo -host "$HOST" -port "$PORT" -dir "$DATA_DIR" >"$LOG" 2>&1 &
@@ -93,8 +99,7 @@ assert_status "/get_tool?name=ripgrep&os=linux&arch=amd64"                200 "r
 assert_status "/get_tool?name=ripgrep&os=linux&arch=amd64&version=14.0.3" 200 "rg-14.0.3-linux"
 assert_status "/get_tool?name=ripgrep&os=darwin&arch=arm64"               200 "rg-14.1.0-darwin"
 assert_status "/get_tool?name=ripgrep&os=linux&arch=arm64"                404
-assert_status "/get_tool?name=fzf&os=linux&arch=amd64"                    200 "fzf-binary"  # body content
-# fzf.tar.gz is a .tar.gz now, so Content-Type is application/gzip
+assert_status "/get_tool?name=fzf&os=linux&arch=amd64"                    200  # body is gzipped tar, skip exact content check
 assert_status "/get_tool?name=fzf"                                        400
 assert_status "/get_tool?name=fzf&os=linux"                               400
 assert_status "/get_tool?name=nope&os=linux&arch=amd64"                   404
@@ -134,7 +139,7 @@ tmp="$(mktemp -d)"
 (
   cd "$tmp"
   if curl -fsSL "${BASE}/install_tool?name=fzf" | sh >/dev/null 2>&1; then
-    if [[ -f ./fzf.tar.gz && "$(cat ./fzf.tar.gz)" == "fzf-binary" ]]; then
+    if [[ -f ./fzf.tar.gz ]] && cmp -s ./fzf.tar.gz "$OLDPWD/testdata/packages/fzf/0.1.0/linux-amd64/fzf.tar.gz"; then
       ok "install_tool real run saved archive ./fzf.tar.gz"
     else
       ko "install_tool wrong file: $(ls -la)"
@@ -176,7 +181,7 @@ fwd_assert_status() {
   ok "FWD ${url} -> ${status}"
 }
 
-fwd_assert_status "/get_tool?name=fzf&os=linux&arch=amd64"       200 "fzf-binary"
+fwd_assert_status "/get_tool?name=fzf&os=linux&arch=amd64"       200
 fwd_assert_status "/get_tool?name=ripgrep&os=linux&arch=amd64"   200 "rg-14.1.0-linux"
 fwd_assert_status "/get_tool?name=nope"                          404
 
@@ -206,7 +211,7 @@ tmp="$(mktemp -d)"
 (
   cd "$tmp"
   if curl -fsSL "${FWD_BASE}/install_tool?name=fzf" | sh >/dev/null 2>&1; then
-    if [[ -f ./fzf.tar.gz && "$(cat ./fzf.tar.gz)" == "fzf-binary" ]]; then
+    if [[ -f ./fzf.tar.gz ]] && cmp -s ./fzf.tar.gz "$OLDPWD/testdata/packages/fzf/0.1.0/linux-amd64/fzf.tar.gz"; then
       ok "FWD install real run saved archive ./fzf.tar.gz via proxy"
     else
       ko "FWD install produced wrong file"
@@ -249,8 +254,9 @@ fi
 dl_tmp="$(mktemp -d)"
 (
   cd "$dl_tmp"
+  # 'get' saves raw archive; verify content matches original tarball
   if "$OLDPWD/tool_cli" get fzf --os linux --arch amd64 >/dev/null 2>&1; then
-    if [[ -f ./fzf.tar.gz && "$(cat ./fzf.tar.gz)" == "fzf-binary" ]]; then
+    if [[ -f ./fzf.tar.gz ]] && cmp -s ./fzf.tar.gz "$OLDPWD/testdata/packages/fzf/0.1.0/linux-amd64/fzf.tar.gz"; then
       ok "tool_cli get fzf downloaded correct file"
     else
       ko "tool_cli get fzf wrong file: $(ls)"
@@ -261,7 +267,7 @@ dl_tmp="$(mktemp -d)"
 )
 rm -rf "$dl_tmp"
 
-# get with explicit version (ripgrep 14.0.3)
+# get with explicit version (ripgrep 14.0.3; plain-text test fixture)
 dl_tmp="$(mktemp -d)"
 (
   cd "$dl_tmp"
@@ -277,29 +283,13 @@ dl_tmp="$(mktemp -d)"
 )
 rm -rf "$dl_tmp"
 
-# install runs pipe|sh
-dl_tmp="$(mktemp -d)"
-(
-  cd "$dl_tmp"
-  if "$OLDPWD/tool_cli" install fzf >/dev/null 2>&1; then
-    if [[ -f ./fzf.tar.gz && "$(cat ./fzf.tar.gz)" == "fzf-binary" ]]; then
-      ok "tool_cli install fzf saved archive ./fzf.tar.gz"
-    else
-      ko "tool_cli install fzf wrong file: $(ls)"
-    fi
-  else
-    ko "tool_cli install fzf command failed"
-  fi
-)
-rm -rf "$dl_tmp"
-
-# install with --dir installs into that dir (which may not exist yet)
+# install extracts archive into target dir
 TARGET_DIR="$(mktemp -d)/bin"
 if ./tool_cli install fzf --dir "$TARGET_DIR" >/dev/null 2>&1; then
-  if [[ -f "$TARGET_DIR/fzf.tar.gz" && "$(cat "$TARGET_DIR/fzf.tar.gz")" == "fzf-binary" ]]; then
-    ok "tool_cli install fzf --dir $TARGET_DIR"
+  if [[ -x "$TARGET_DIR/fzf" && "$(cat "$TARGET_DIR/fzf")" == "fzf-binary-real-content" ]]; then
+    ok "tool_cli install fzf --dir extracts binary"
   else
-    ko "tool_cli install --dir wrong file: $(ls "$TARGET_DIR" 2>&1)"
+    ko "tool_cli install --dir wrong: $(ls -la "$TARGET_DIR" 2>&1; cat "$TARGET_DIR"/fzf 2>&1)"
   fi
 else
   ko "tool_cli install --dir command failed"
@@ -309,7 +299,7 @@ rm -rf "$(dirname "$TARGET_DIR")"
 # get with --dir downloads into that dir (creating if needed)
 TARGET_DIR="$(mktemp -d)/downloads"
 if ./tool_cli get fzf --os linux --arch amd64 --dir "$TARGET_DIR" >/dev/null 2>&1; then
-  if [[ -f "$TARGET_DIR/fzf.tar.gz" && "$(cat "$TARGET_DIR/fzf.tar.gz")" == "fzf-binary" ]]; then
+  if [[ -f "$TARGET_DIR/fzf.tar.gz" ]] && cmp -s "$TARGET_DIR/fzf.tar.gz" ./testdata/packages/fzf/0.1.0/linux-amd64/fzf.tar.gz; then
     ok "tool_cli get fzf --dir $TARGET_DIR"
   else
     ko "tool_cli get --dir wrong file: $(ls "$TARGET_DIR" 2>&1)"

@@ -11,9 +11,10 @@ Commands:
       --os <os>                     Override os (default: detected via uname)
       --arch <arch>                 Override arch (default: detected via uname)
       --dir, -d <path>              Target directory (default: current dir)
-  install <name> [options]          Download + install (pipe|sh)
+  install <name> [options]          Download + extract archive into target dir
     options:
-      --dir, -d <path>              Install directory (default: current dir)
+      --dir, -d <path>              Install directory (default: /usr/local/bin)
+      --version, -v <v>             Exact version (default: latest)
   run remote://<path> [args...]     Execute a remote shell script via pipe
                                     (args are passed to the script's "$@")
   push <local> remote://<path>      Upload a local file to scripts/<path>

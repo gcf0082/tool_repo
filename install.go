@@ -12,9 +12,6 @@ var installTmpl string
 //go:embed install_tool_cli.sh.tmpl
 var installCLITmpl string
 
-//go:embed tool_cli
-var toolCLIScript string
-
 //go:embed tool_cli_help.txt
 var toolCLIHelp string
 
@@ -125,9 +122,8 @@ func (s *Server) handleInstallCLI(w http.ResponseWriter, r *http.Request) {
 	base := publicBaseURL(r)
 	w.Header().Set("Content-Type", "text/x-shellscript; charset=utf-8")
 	_ = installCLITemplate.Execute(w, struct {
-		Script  string
 		BaseURL string
-	}{toolCLIScript, base})
+	}{base})
 }
 
 func publicBaseURL(r *http.Request) string {

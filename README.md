@@ -123,7 +123,7 @@ tool_repo -upstream http://source-host:28080 -port 9090
 
 ## 客户端工具 tool_cli
 
-`tool_cli` 是 bash 写的轻量客户端，包住 `curl` 操作，避免每次记 URL。配置位于 `~/.tool_cli/config.json`。
+`tool_cli` 是 Go 写的轻量客户端，**无依赖**（静态二进制，不需要 curl / python3）。配置位于 `~/.tool_cli/config.json`。
 
 ### 一键引导（没有 tool_cli 时）
 
@@ -131,7 +131,13 @@ tool_repo -upstream http://source-host:28080 -port 9090
 curl -fsSL http://host:28080/install_tool_cli | sh
 ```
 
-服务端把嵌入的 `tool_cli` 装到 **`/usr/local/bin/tool_cli`**（非 root 自动 `sudo`），并用访问者实际用的 URL 自动执行 `set-url`，装完即可用。
+服务端生成的引导脚本做三件事：
+
+1. 根据 `uname` 探测 os/arch，调用 `/get_tool?name=tool_cli&os=X&arch=Y` 下载对应平台的 `tool_cli.tar.gz`
+2. 解压，提取 `tool_cli` 二进制，`install -m 755` 到 **`/usr/local/bin/tool_cli`**（非 root 自动 `sudo`）
+3. 用访问者实际用的 URL 自动 `tool_cli set-url`
+
+因此管理员需要先把 `dist.sh` 产出的 `dist/packages/tool_cli/` 目录部署到服务端的 `packages/` 下，客户端才能引导。
 
 自定义安装位置（不用 sudo）：
 
@@ -153,8 +159,8 @@ tool_cli get ripgrep --version 14.1.0
 tool_cli get mytool --os darwin --arch arm64
 tool_cli get fzf --dir ~/Downloads               # 下到指定目录（不存在会自动创建）
 
-tool_cli install fzf                             # 等价于 curl /install_tool?name=fzf | sh
-tool_cli install fzf --dir /usr/local/bin        # 装到指定目录（需要写权限；否则用 sudo）
+tool_cli install fzf                             # 下载 + 解压到 /usr/local/bin（默认）
+tool_cli install fzf --dir $HOME/.local/bin      # 自定义目录（避免 sudo）
 
 tool_cli run remote://deploy.sh myapp prod       # 流式执行远端脚本，args 传给 $@
 tool_cli push ./local.sh remote://my/local.sh    # 上传本地脚本到服务端 scripts/my/local.sh
@@ -163,7 +169,7 @@ tool_cli push ./local.sh remote://my/local.sh    # 上传本地脚本到服务�
 TOOL_CLI_URL=http://other:9090 tool_cli install fzf
 ```
 
-依赖：`bash`、`curl`、`python3`（只用来读写 JSON 配置）。
+依赖：无（静态 Go 二进制）。安装行为：`install` 会把 tar.gz / zip 解压到 `--dir`（默认 `/usr/local/bin`），并给可执行文件加 `+x`。
 
 ## 远端脚本：执行 / 上传
 
@@ -205,10 +211,12 @@ tool_cli push ./local.sh remote://deploy/prod.sh
 ## 构建
 
 ```bash
-./dist.sh    # 交叉编译 5 个平台到 dist/
+./dist.sh    # 交叉编译 server 和 tool_cli 到 dist/
 ```
 
-产物：`tool_repo-linux-amd64`、`-linux-arm64`、`-darwin-amd64`、`-darwin-arm64`、`-windows-amd64.exe`。
+产物：
+- `dist/tool_repo-<os-arch>[.exe]`：服务端，5 平台
+- `dist/packages/tool_cli/<ver>/<os-arch>/tool_cli.tar.gz`：客户端，5 平台。部署时把 `dist/packages/` 拷到服务端的数据根目录里，`/install_tool_cli` 才能工作。
 
 ## 发布
 

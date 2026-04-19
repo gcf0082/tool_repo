@@ -1,3 +1,6 @@
 /dist/
 /tool_repo
+/tool_cli
 *.test
+# testdata/packages/tool_cli is produced at test-time
+/testdata/packages/tool_cli/

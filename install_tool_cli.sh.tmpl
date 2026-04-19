@@ -9,35 +9,66 @@
 #         Set to a user-writable path to avoid sudo, e.g.
 #           ... | DEST=$HOME/.local/bin/tool_cli sh
 #
-# After install the script auto-runs 'tool_cli set-url {{.BaseURL}}',
-# so the client is ready to use immediately.
-
+# This script downloads the tool_cli binary matching your OS/arch
+# from the tool_repo's packages/ directory, extracts it, installs to
+# $DEST, then runs 'tool_cli set-url {{.BaseURL}}'.
 set -eu
 
 DEST="${DEST:-/usr/local/bin/tool_cli}"
+BASE="{{.BaseURL}}"
 dir="$(dirname "$DEST")"
 
-tmp="$(mktemp)"
-cat > "$tmp" <<'__TOOL_CLI_EOF__'
-{{.Script}}
-__TOOL_CLI_EOF__
+case "$(uname -s)" in
+  Linux)  OS=linux ;;
+  Darwin) OS=darwin ;;
+  *) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
+esac
+case "$(uname -m)" in
+  x86_64|amd64)  ARCH=amd64 ;;
+  aarch64|arm64) ARCH=arm64 ;;
+  *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
+esac
+
+URL="${BASE}/get_tool?name=tool_cli&os=${OS}&arch=${ARCH}"
+
+tmp="$(mktemp -d)"
+trap 'rm -rf "$tmp"' EXIT
+
+echo "downloading $URL ..."
+FNAME=$(curl -sSI "$URL" | awk 'BEGIN{IGNORECASE=1}
+  /^content-disposition:/ {
+    if (match($0, /filename="[^"]+"/)) {
+      print substr($0, RSTART+10, RLENGTH-11); exit
+    }
+  }')
+OUT="${FNAME:-tool_cli.tar.gz}"
+curl -fSL -o "$tmp/$OUT" "$URL"
+
+echo "extracting ..."
+case "$OUT" in
+  *.tar.gz|*.tgz) tar -xzf "$tmp/$OUT" -C "$tmp" ;;
+  *.zip)          unzip -q "$tmp/$OUT" -d "$tmp" ;;
+  *) echo "unsupported archive format: $OUT" >&2; exit 1 ;;
+esac
+
+BIN="$(find "$tmp" -type f \( -name tool_cli -o -name tool_cli.exe \) | head -1)"
+[ -n "$BIN" ] || { echo "tool_cli binary not found in archive" >&2; exit 1; }
+chmod +x "$BIN"
 
 echo "installing tool_cli to $DEST ..."
 if [ -w "$dir" ]; then
-  install -m 755 "$tmp" "$DEST"
+  install -m 755 "$BIN" "$DEST"
 elif command -v sudo >/dev/null 2>&1; then
   echo "(need sudo to write $dir — override with DEST=...)"
-  sudo install -m 755 "$tmp" "$DEST"
+  sudo install -m 755 "$BIN" "$DEST"
 else
   echo "cannot write $DEST and sudo not available" >&2
   echo "override: DEST=\$HOME/.local/bin/tool_cli  curl ... | sh" >&2
-  rm -f "$tmp"
   exit 1
 fi
-rm -f "$tmp"
 
-echo "configuring server URL: {{.BaseURL}}"
-"$DEST" set-url "{{.BaseURL}}" >/dev/null
+echo "configuring server URL: ${BASE}"
+"$DEST" set-url "${BASE}" >/dev/null
 
 echo "done. tool_cli installed at $DEST"
 echo "try: tool_cli help"
