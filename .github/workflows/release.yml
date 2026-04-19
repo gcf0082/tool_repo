@@ -52,8 +52,11 @@ jobs:
             gh release delete "$TAG" --yes --cleanup-tag
           fi
 
+          # Only upload server binaries (dist/packages/ is a tree of
+          # tool_cli tarballs meant for rsync into a live server's
+          # packages/ dir, not for flat Release attachments).
           gh release create "$TAG" \
             --title "$title" \
             --notes "$notes" \
             --target "$GITHUB_SHA" \
-            dist/*
+            dist/tool_repo-*
