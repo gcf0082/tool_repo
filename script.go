@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -111,6 +112,7 @@ func (s *Server) handlePutScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := os.MkdirAll(filepath.Dir(absClean), 0o755); err != nil {
+		log.Printf("[ERROR] put_script mkdir %s: %v", filepath.Dir(absClean), err)
 		http.Error(w, "mkdir: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -125,27 +127,33 @@ func (s *Server) handlePutScript(w http.ResponseWriter, r *http.Request) {
 
 	f, err := os.OpenFile(absClean, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {
+		log.Printf("[ERROR] put_script open %s: %v", absClean, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if _, err := io.Copy(f, r.Body); err != nil {
+	n, err := io.Copy(f, r.Body)
+	if err != nil {
 		f.Close()
-		// MaxBytesReader sets status via http.MaxBytesError mapping; try to be explicit
-		if maxErr := (*http.MaxBytesError)(nil); err == maxErr || strings.Contains(err.Error(), "http: request body too large") {
+		if strings.Contains(err.Error(), "http: request body too large") {
+			log.Printf("[WARN] put_script body too large: path=%s", p)
 			http.Error(w, "body too large", http.StatusRequestEntityTooLarge)
 			return
 		}
+		log.Printf("[ERROR] put_script copy %s: %v", absClean, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := f.Close(); err != nil {
+		log.Printf("[ERROR] put_script close %s: %v", absClean, err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	if existed {
+		log.Printf("[INFO] put_script overwrote %s (%d bytes)", p, n)
 		w.WriteHeader(http.StatusOK)
 	} else {
+		log.Printf("[INFO] put_script created %s (%d bytes)", p, n)
 		w.WriteHeader(http.StatusCreated)
 	}
 	fmt.Fprintf(w, "wrote %s\n", p)

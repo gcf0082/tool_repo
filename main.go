@@ -62,7 +62,7 @@ func main() {
 	mux.HandleFunc("PUT /put_script", s.handlePutScript)
 
 	log.Printf("tool_repo listening on %s", addr)
-	if err := http.ListenAndServe(addr, mux); err != nil {
+	if err := http.ListenAndServe(addr, accessLog(mux)); err != nil {
 		log.Fatal(fmt.Errorf("listen: %w", err))
 	}
 }

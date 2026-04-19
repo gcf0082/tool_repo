@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"mime"
 	"net/http"
 	"net/http/httputil"
@@ -99,6 +100,7 @@ func writeErr(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrInvalid):
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	default:
+		log.Printf("[ERROR] internal: %v", err)
 		http.Error(w, "internal error", http.StatusInternalServerError)
 	}
 }
