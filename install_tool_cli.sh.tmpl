@@ -34,8 +34,33 @@ URL="${BASE}/get_tool?name=tool_cli&os=${OS}&arch=${ARCH}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
+# Probe the URL first so we can give a clear error if the admin
+# hasn't deployed the tool_cli package.
+hdr="$(curl -sSI "$URL" || true)"
+code="$(printf '%s' "$hdr" | awk 'NR==1 && /^HTTP/ {print $2; exit}')"
+case "$code" in
+  200) ;;
+  404)
+    cat >&2 <<EOF
+tool_cli is not deployed on this server:
+  GET $URL -> 404
+
+Ask the administrator to rsync dist/packages/tool_cli/ into the
+server's data root, e.g.:
+    rsync -a dist/packages/tool_cli/ /srv/tool_repo/packages/tool_cli/
+
+(Run ./dist.sh in the tool_repo source tree to produce that directory.)
+EOF
+    exit 1
+    ;;
+  "")
+    echo "cannot reach ${BASE}" >&2; exit 1 ;;
+  *)
+    echo "unexpected HTTP ${code} from ${URL}" >&2; exit 1 ;;
+esac
+
 echo "downloading $URL ..."
-FNAME=$(curl -sSI "$URL" | awk 'BEGIN{IGNORECASE=1}
+FNAME=$(printf '%s' "$hdr" | awk 'BEGIN{IGNORECASE=1}
   /^content-disposition:/ {
     if (match($0, /filename="[^"]+"/)) {
       print substr($0, RSTART+10, RLENGTH-11); exit
