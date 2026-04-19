@@ -57,6 +57,7 @@ func main() {
 	mux.HandleFunc("GET /get_tool", s.handleGet)
 	mux.HandleFunc("GET /install_tool", s.handleInstall)
 	mux.HandleFunc("GET /install_tool_cli", s.handleInstallCLI)
+	mux.HandleFunc("GET /tool_cli", s.handleToolCLIBin)
 	mux.HandleFunc("GET /tool_cli_help", s.handleToolCLIHelp)
 	mux.HandleFunc("GET /get_script", s.handleGetScript)
 	mux.HandleFunc("PUT /put_script", s.handlePutScript)

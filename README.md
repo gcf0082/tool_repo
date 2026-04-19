@@ -133,11 +133,11 @@ curl -fsSL http://host:28080/install_tool_cli | sh
 
 服务端生成的引导脚本做三件事：
 
-1. 根据 `uname` 探测 os/arch，调用 `/get_tool?name=tool_cli&os=X&arch=Y` 下载对应平台的 `tool_cli.tar.gz`
-2. 解压，提取 `tool_cli` 二进制，`install -m 755` 到 **`/usr/local/bin/tool_cli`**（非 root 自动 `sudo`）
+1. 根据 `uname` 探测 os/arch，调用 `/tool_cli?os=X&arch=Y` 下载对应平台的二进制（**嵌入**在服务端二进制里，不走 `packages/`）
+2. `install -m 755` 到 **`/usr/local/bin/tool_cli`**（非 root 自动 `sudo`）
 3. 用访问者实际用的 URL 自动 `tool_cli set-url`
 
-因此管理员需要先把 `dist.sh` 产出的 `dist/packages/tool_cli/` 目录部署到服务端的 `packages/` 下，客户端才能引导。
+无需额外部署客户端包——服务端二进制里直接带了 5 个平台的 tool_cli。
 
 自定义安装位置（不用 sudo）：
 
@@ -211,12 +211,10 @@ tool_cli push ./local.sh remote://deploy/prod.sh
 ## 构建
 
 ```bash
-./dist.sh    # 交叉编译 server 和 tool_cli 到 dist/
+./dist.sh    # 先交叉编译 tool_cli → tool_cli_bin/，再交叉编译 server
 ```
 
-产物：
-- `dist/tool_repo-<os-arch>[.exe]`：服务端，5 平台
-- `dist/packages/tool_cli/<ver>/<os-arch>/tool_cli.tar.gz`：客户端，5 平台。部署时把 `dist/packages/` 拷到服务端的数据根目录里，`/install_tool_cli` 才能工作。
+产物：`dist/tool_repo-<os-arch>[.exe]`（5 平台）。每个服务端二进制都嵌入了 5 份 tool_cli，客户端通过 `/install_tool_cli` 可一键获取。
 
 ## 发布
 

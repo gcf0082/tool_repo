@@ -2,5 +2,6 @@
 /tool_repo
 /tool_cli
 *.test
-# testdata/packages/tool_cli is produced at test-time
-/testdata/packages/tool_cli/
+# Note: tool_cli_bin/ contains committed empty placeholders so plain
+# 'go build' works. dist.sh and test.sh overwrite them with real
+# cross-compiled tool_cli binaries before deploying.

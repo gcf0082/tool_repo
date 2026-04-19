@@ -36,6 +36,7 @@ func newTestServer(t *testing.T) (*httptest.Server, string) {
 	mux.HandleFunc("GET /get_tool", s.handleGet)
 	mux.HandleFunc("GET /install_tool", s.handleInstall)
 	mux.HandleFunc("GET /install_tool_cli", s.handleInstallCLI)
+	mux.HandleFunc("GET /tool_cli", s.handleToolCLIBin)
 	return httptest.NewServer(mux), root
 }
 

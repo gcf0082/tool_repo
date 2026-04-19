@@ -1,6 +1,7 @@
 package main
 
 import (
+	"embed"
 	_ "embed"
 	"net/http"
 	"text/template"
@@ -14,6 +15,15 @@ var installCLITmpl string
 
 //go:embed tool_cli_help.txt
 var toolCLIHelp string
+
+// tool_cli binaries for every supported platform are baked into the
+// server binary at build time. dist.sh / test.sh are responsible for
+// populating tool_cli_bin/<os-arch>/tool_cli[.exe] with real binaries
+// before running `go build`; otherwise the embedded placeholders are
+// empty and /tool_cli serves zero bytes.
+//
+//go:embed tool_cli_bin
+var toolCLIBinaries embed.FS
 
 const rootHelp = `tool_repo — simple tool distribution
 
@@ -92,6 +102,36 @@ func (s *Server) handleRootHelp(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleToolCLIHelp(w http.ResponseWriter, r *http.Request) {
 	writeHelp(w, toolCLIHelp)
+}
+
+// handleToolCLIBin serves the embedded tool_cli binary for the
+// requested os+arch. Used by the /install_tool_cli bootstrap so that
+// a fresh machine can get the client with just one HTTP round trip.
+func (s *Server) handleToolCLIBin(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	osName := q.Get("os")
+	arch := q.Get("arch")
+	if osName == "" || arch == "" {
+		http.Error(w, "os and arch are required", http.StatusBadRequest)
+		return
+	}
+	if !allowedOS[osName] || !allowedArch[arch] {
+		http.Error(w, "unsupported os/arch", http.StatusBadRequest)
+		return
+	}
+	fname := "tool_cli"
+	if osName == "windows" {
+		fname = "tool_cli.exe"
+	}
+	p := "tool_cli_bin/" + osName + "-" + arch + "/" + fname
+	data, err := toolCLIBinaries.ReadFile(p)
+	if err != nil {
+		http.Error(w, "tool_cli binary not bundled for "+osName+"-"+arch, http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+fname+`"`)
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleInstall(w http.ResponseWriter, r *http.Request) {

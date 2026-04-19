@@ -9,9 +9,10 @@
 #         Set to a user-writable path to avoid sudo, e.g.
 #           ... | DEST=$HOME/.local/bin/tool_cli sh
 #
-# This script downloads the tool_cli binary matching your OS/arch
-# from the tool_repo's packages/ directory, extracts it, installs to
-# $DEST, then runs 'tool_cli set-url {{.BaseURL}}'.
+# This script downloads the tool_cli binary from the server's bundled
+# binary endpoint (GET /tool_cli?os=X&arch=Y), installs to $DEST, and
+# runs 'tool_cli set-url {{.BaseURL}}'. No extraction, no packages
+# deployment required — the binary is baked into the tool_repo server.
 set -eu
 
 DEST="${DEST:-/usr/local/bin/tool_cli}"
@@ -29,63 +30,22 @@ case "$(uname -m)" in
   *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;;
 esac
 
-URL="${BASE}/get_tool?name=tool_cli&os=${OS}&arch=${ARCH}"
-
-tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT
-
-# Probe the URL first so we can give a clear error if the admin
-# hasn't deployed the tool_cli package.
-hdr="$(curl -sSI "$URL" || true)"
-code="$(printf '%s' "$hdr" | awk 'NR==1 && /^HTTP/ {print $2; exit}')"
-case "$code" in
-  200) ;;
-  404)
-    cat >&2 <<EOF
-tool_cli is not deployed on this server:
-  GET $URL -> 404
-
-Ask the administrator to rsync dist/packages/tool_cli/ into the
-server's data root, e.g.:
-    rsync -a dist/packages/tool_cli/ /srv/tool_repo/packages/tool_cli/
-
-(Run ./dist.sh in the tool_repo source tree to produce that directory.)
-EOF
-    exit 1
-    ;;
-  "")
-    echo "cannot reach ${BASE}" >&2; exit 1 ;;
-  *)
-    echo "unexpected HTTP ${code} from ${URL}" >&2; exit 1 ;;
-esac
+URL="${BASE}/tool_cli?os=${OS}&arch=${ARCH}"
+tmp="$(mktemp)"
+trap 'rm -f "$tmp"' EXIT
 
 echo "downloading $URL ..."
-FNAME=$(printf '%s' "$hdr" | awk 'BEGIN{IGNORECASE=1}
-  /^content-disposition:/ {
-    if (match($0, /filename="[^"]+"/)) {
-      print substr($0, RSTART+10, RLENGTH-11); exit
-    }
-  }')
-OUT="${FNAME:-tool_cli.tar.gz}"
-curl -fSL -o "$tmp/$OUT" "$URL"
-
-echo "extracting ..."
-case "$OUT" in
-  *.tar.gz|*.tgz) tar -xzf "$tmp/$OUT" -C "$tmp" ;;
-  *.zip)          unzip -q "$tmp/$OUT" -d "$tmp" ;;
-  *) echo "unsupported archive format: $OUT" >&2; exit 1 ;;
-esac
-
-BIN="$(find "$tmp" -type f \( -name tool_cli -o -name tool_cli.exe \) | head -1)"
-[ -n "$BIN" ] || { echo "tool_cli binary not found in archive" >&2; exit 1; }
-chmod +x "$BIN"
+if ! curl -fSL -o "$tmp" "$URL"; then
+  echo "download failed; tool_cli binary for ${OS}-${ARCH} may not be bundled" >&2
+  exit 1
+fi
 
 echo "installing tool_cli to $DEST ..."
 if [ -w "$dir" ]; then
-  install -m 755 "$BIN" "$DEST"
+  install -m 755 "$tmp" "$DEST"
 elif command -v sudo >/dev/null 2>&1; then
   echo "(need sudo to write $dir — override with DEST=...)"
-  sudo install -m 755 "$BIN" "$DEST"
+  sudo install -m 755 "$tmp" "$DEST"
 else
   echo "cannot write $DEST and sudo not available" >&2
   echo "override: DEST=\$HOME/.local/bin/tool_cli  curl ... | sh" >&2

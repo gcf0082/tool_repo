@@ -89,12 +89,11 @@ func TestInstallToolCLIEndpoint(t *testing.T) {
 		t.Errorf("content-type %q", ct)
 	}
 	for _, want := range []string{
-		"/usr/local/bin/tool_cli",               // default DEST
-		"DEST:-",                                // env override pattern
-		"get_tool?name=tool_cli&os=",            // downloads via packages/
-		`"$DEST" set-url "`,                     // auto-configures URL
+		"/usr/local/bin/tool_cli",   // default DEST
+		"DEST:-",                    // env override pattern
+		"/tool_cli?os=",             // direct binary endpoint
+		`"$DEST" set-url "`,         // auto-configures URL
 		"install -m 755",
-		"tar -xzf",                              // extraction step
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("install_tool_cli script missing %q", want)

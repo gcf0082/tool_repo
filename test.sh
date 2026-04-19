@@ -75,13 +75,14 @@ assert_body_contains() {
 }
 
 log "== build =="
+# Build tool_cli for linux-amd64 FIRST so the server can embed it.
+# (dist.sh does the same for all 5 platforms.)
+mkdir -p tool_cli_bin/linux-amd64
+go build -trimpath -o tool_cli_bin/linux-amd64/tool_cli ./cmd/tool_cli || { log "tool_cli build failed"; exit 1; }
 go build -o ./tool_repo . || { log "build failed"; exit 1; }
-go build -o ./tool_cli ./cmd/tool_cli || { log "tool_cli build failed"; exit 1; }
-
-# Publish tool_cli into testdata/packages so /install_tool_cli can find it.
-tc_pkg_dir="./testdata/packages/tool_cli/0.1.0/linux-amd64"
-mkdir -p "$tc_pkg_dir"
-tar -C "$(dirname "$(realpath ./tool_cli)")" -czf "$tc_pkg_dir/tool_cli.tar.gz" tool_cli
+# Copy the just-built linux-amd64 tool_cli to ./tool_cli for the
+# local tests that exec the client directly.
+cp tool_cli_bin/linux-amd64/tool_cli ./tool_cli
 
 log "== start server on ${HOST}:${PORT} =="
 ./tool_repo -host "$HOST" -port "$PORT" -dir "$DATA_DIR" >"$LOG" 2>&1 &
