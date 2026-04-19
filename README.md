@@ -32,24 +32,30 @@ tool_cli install ripgrep                               # 装工具
 
 ### packages/ 布局
 
-`packages/` 下必须有一层 `<name>/` 目录，三种布局共存：
+唯一固定 4 级：`<name>/<version>/<os-arch>/<file>`
 
 ```
 packages/
-├── fzf/                            # B. 无版本 + 平台专属
-│   ├── linux-amd64
-│   └── linux-amd64.tar.gz
-├── ripgrep/                        # C. 有版本 + 平台专属
-│   └── 14.1.0/
-│       ├── linux-amd64.tar.gz
-│       └── darwin-arm64.tar.gz
-└── deploy-script/                  # D. 平台无关（文件名即标识）
-    ├── 1.2.0
-    └── bundle.tar.gz
+├── fzf/
+│   └── 0.1.0/
+│       └── linux-amd64/
+│           └── fzf                 # 裸二进制
+└── ripgrep/
+    ├── 14.0.3/
+    │   └── linux-amd64/
+    │       └── ripgrep.tar.gz
+    └── 14.1.0/
+        ├── linux-amd64/
+        │   └── ripgrep.tar.gz
+        └── darwin-arm64/
+            └── ripgrep.tar.gz
 ```
 
-平台命名 Go 风格：`linux-amd64`、`darwin-arm64`、`windows-amd64`。
-包格式支持裸文件 + `.tar.gz` / `.tgz` / `.tar.bz2` / `.tbz2` / `.tar.xz` / `.txz` / `.zip` / `.7z`。
+- 平台命名 Go 风格：`linux-amd64`、`darwin-arm64`、`windows-amd64`
+- 叶子文件名随意；扩展名仅用于响应的 `Content-Type`、以及同版本同平台多文件时的优先级：裸文件 > `.tar.gz` > 其他压缩
+- 支持的压缩扩展：`.tar.gz` / `.tgz` / `.tar.bz2` / `.tbz2` / `.tar.xz` / `.txz` / `.zip` / `.7z`
+
+`/get_tool` 请求必须带 `name` + `os` + `arch`；`version` 可选（不给取 semver 最大）。平台无关 / 无版本的场景不再支持（如需要，把脚本放到 `scripts/` 用 `run remote://` 执行）。
 
 ## HTTP API
 
@@ -64,22 +70,21 @@ packages/
 
 ### 解析规则
 
-- `os` + `arch` 必须同时给或同时不给
-- 有 `version` → 精确匹配
+- `name` / `os` / `arch` 必选；`version` 可选
 - 无 `version` → 按 semver 挑最大，非 semver 按字典序兜底
-- 同一包同平台多扩展名并存时：裸文件 > `.tar.gz` > 其他
+- 同一包同版本同平台多文件时：裸文件 > `.tar.gz` > 其他；仍有并列 → 409 Conflict
 - `/get_tool` 响应带 `Content-Disposition: attachment; filename="..."`，可用 `curl -OJ` 保留文件名
 
 ### 示例
 
 ```bash
-# 用 curl 手动下载
+# 用 curl 手动下载（os/arch 必填）
 curl 'http://host:8080/get_tool?name=ripgrep&os=linux&arch=amd64' -OJ
 
 # 用 /install_tool 一行装到当前目录
 curl -fsSL 'http://host:8080/install_tool?name=ripgrep' | sh
 
-# 用客户端装系统级（见下节）
+# 用客户端（os/arch 自动 uname 推断）
 tool_cli install ripgrep
 ```
 

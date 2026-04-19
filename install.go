@@ -34,26 +34,29 @@ Quick start (as a new client):
   tool_cli install <name>
 `
 
-const getHelp = `GET /get_tool?name=<n>[&os=<os>&arch=<arch>][&version=<v>]
+const getHelp = `GET /get_tool?name=<n>&os=<os>&arch=<arch>[&version=<v>]
 
 Download a package.
 
 Parameters:
   name     (required) package name
-  os       (optional) linux | darwin | windows
-  arch     (optional) amd64 | arm64 | 386 | arm
-  version  (optional) exact version; omitted = latest
+  os       (required) linux | darwin | windows
+  arch     (required) amd64 | arm64 | 386 | arm
+  version  (optional) exact version; omitted = latest (semver max,
+                      lexical fallback for non-semver names)
 
-Notes:
-  - os and arch must be given together, or neither.
-  - Without os/arch, only platform-agnostic artifacts are considered.
-  - Response carries Content-Disposition with the original filename.
+Layout expected on disk:
+  packages/<name>/<version>/<os>-<arch>/<file>
+
+Response:
+  Content-Disposition: attachment; filename="<file>"
+  (use curl -OJ to save with that name)
 
 Examples (raw curl):
   curl 'http://HOST/get_tool?name=ripgrep&os=linux&arch=amd64' -OJ
-  curl 'http://HOST/get_tool?name=mytool' -OJ
+  curl 'http://HOST/get_tool?name=ripgrep&os=linux&arch=amd64&version=14.0.3' -OJ
 
-Or using the tool_cli client (os/arch auto-detected):
+Or using the tool_cli client (os/arch auto-detected from uname):
   tool_cli get ripgrep
   tool_cli get ripgrep --version 14.1.0
 `

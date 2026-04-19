@@ -27,37 +27,46 @@ func mkTree(t *testing.T, root string, paths []string) {
 	}
 }
 
-func TestScanClassification(t *testing.T) {
+func TestScanLayout(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"fzf/linux-amd64",
-		"fzf/linux-amd64.tar.gz",
-		"fzf/darwin-arm64",
-		"ripgrep/14.0.3/linux-amd64.tar.gz",
-		"ripgrep/14.1.0/linux-amd64.tar.gz",
-		"ripgrep/14.1.0/darwin-arm64.tar.gz",
-		"deploy-script/1.1.0",
-		"deploy-script/1.2.0",
-		"deploy-script/latest",
-		"deploy-script/bundle.tar.gz",
+		"ripgrep/14.0.3/linux-amd64/ripgrep.tar.gz",
+		"ripgrep/14.1.0/linux-amd64/ripgrep.tar.gz",
+		"ripgrep/14.1.0/darwin-arm64/ripgrep.tar.gz",
+		"fzf/0.1.0/linux-amd64/fzf",
 	})
 
-	cases := []struct {
-		name    string
-		wantLen int
-	}{
-		{"fzf", 3},
-		{"ripgrep", 3},
-		{"deploy-script", 4},
+	arts, err := scan(root, "ripgrep")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, c := range cases {
-		arts, err := scan(root, c.name)
-		if err != nil {
-			t.Fatalf("scan %s: %v", c.name, err)
-		}
-		if len(arts) != c.wantLen {
-			t.Errorf("scan %s: got %d artifacts, want %d: %+v", c.name, len(arts), c.wantLen, arts)
-		}
+	if len(arts) != 3 {
+		t.Errorf("scan ripgrep: got %d, want 3: %+v", len(arts), arts)
+	}
+
+	arts, err = scan(root, "fzf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arts) != 1 {
+		t.Errorf("scan fzf: got %d, want 1", len(arts))
+	}
+}
+
+func TestScanSkipsInvalidEntries(t *testing.T) {
+	root := t.TempDir()
+	mkTree(t, root, []string{
+		"foo/1.0.0/linux-amd64/a",
+		"foo/1.0.0/bogus-platform/b", // unknown OS/arch → skipped
+		"foo/stray-file",             // file at name level → skipped
+		"foo/1.0.0/linux-amd64/nested/", // directory inside platform → skipped
+	})
+	arts, err := scan(root, "foo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arts) != 1 || arts[0].Platform != "linux-amd64" {
+		t.Errorf("got %+v, want single linux-amd64 artifact", arts)
 	}
 }
 
@@ -77,12 +86,12 @@ func TestScanInvalidName(t *testing.T) {
 	}
 }
 
-func TestResolveRipgrep(t *testing.T) {
+func TestResolvePicksLatestByPlatform(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"ripgrep/14.0.3/linux-amd64.tar.gz",
-		"ripgrep/14.1.0/linux-amd64.tar.gz",
-		"ripgrep/14.1.0/darwin-arm64.tar.gz",
+		"ripgrep/14.0.3/linux-amd64/ripgrep.tar.gz",
+		"ripgrep/14.1.0/linux-amd64/ripgrep.tar.gz",
+		"ripgrep/14.1.0/darwin-arm64/ripgrep.tar.gz",
 	})
 	arts, _ := scan(root, "ripgrep")
 
@@ -91,10 +100,10 @@ func TestResolveRipgrep(t *testing.T) {
 		wantPath      string
 		wantErr       error
 	}{
-		{"linux", "amd64", "", filepath.Join("ripgrep", "14.1.0", "linux-amd64.tar.gz"), nil},
-		{"linux", "amd64", "14.0.3", filepath.Join("ripgrep", "14.0.3", "linux-amd64.tar.gz"), nil},
+		{"linux", "amd64", "", filepath.Join("ripgrep", "14.1.0", "linux-amd64", "ripgrep.tar.gz"), nil},
+		{"linux", "amd64", "14.0.3", filepath.Join("ripgrep", "14.0.3", "linux-amd64", "ripgrep.tar.gz"), nil},
+		{"darwin", "arm64", "", filepath.Join("ripgrep", "14.1.0", "darwin-arm64", "ripgrep.tar.gz"), nil},
 		{"linux", "arm64", "", "", ErrNotFound},
-		{"", "", "", "", ErrNotFound}, // platform-agnostic query on platform-specific pkg
 	}
 	for _, c := range cases {
 		got, err := resolve(arts, c.os, c.arch, c.ver)
@@ -114,47 +123,27 @@ func TestResolveRipgrep(t *testing.T) {
 	}
 }
 
-func TestResolveDeployScript(t *testing.T) {
+func TestResolveRequiresOSArch(t *testing.T) {
 	root := t.TempDir()
-	mkTree(t, root, []string{
-		"deploy-script/1.1.0",
-		"deploy-script/1.2.0",
-		"deploy-script/bundle.tar.gz",
-	})
-	arts, _ := scan(root, "deploy-script")
+	mkTree(t, root, []string{"x/1.0.0/linux-amd64/a"})
+	arts, _ := scan(root, "x")
 
-	// No os/arch → platform-agnostic pool; semver 1.2.0 > 1.1.0 > "bundle" (non-semver)
-	got, err := resolve(arts, "", "", "")
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
-	}
-	if got.Version != "1.2.0" {
-		t.Errorf("want 1.2.0, got %s (path=%s)", got.Version, got.Path)
-	}
-
-	// Explicit version
-	got, err = resolve(arts, "", "", "1.1.0")
-	if err != nil {
-		t.Fatalf("resolve ver: %v", err)
-	}
-	if got.Version != "1.1.0" {
-		t.Errorf("want 1.1.0, got %s", got.Version)
-	}
-
-	// Platform query on platform-agnostic pkg → 404
-	_, err = resolve(arts, "linux", "amd64", "")
-	if !errors.Is(err, ErrNotFound) {
-		t.Errorf("want ErrNotFound, got %v", err)
+	for _, c := range []struct{ os, arch string }{
+		{"", ""}, {"linux", ""}, {"", "amd64"},
+	} {
+		_, err := resolve(arts, c.os, c.arch, "")
+		if !errors.Is(err, ErrInvalid) {
+			t.Errorf("resolve(%q,%q): want ErrInvalid, got %v", c.os, c.arch, err)
+		}
 	}
 }
 
 func TestSemverRegression(t *testing.T) {
-	// 1.10.0 > 1.9.0 > 1.2.0 (not lexical)
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"tool/1.2.0/linux-amd64",
-		"tool/1.9.0/linux-amd64",
-		"tool/1.10.0/linux-amd64",
+		"tool/1.2.0/linux-amd64/tool",
+		"tool/1.9.0/linux-amd64/tool",
+		"tool/1.10.0/linux-amd64/tool",
 	})
 	arts, _ := scan(root, "tool")
 	got, err := resolve(arts, "linux", "amd64", "")
@@ -167,11 +156,11 @@ func TestSemverRegression(t *testing.T) {
 }
 
 func TestBareFileOverArchive(t *testing.T) {
-	// Same version, both bare binary and tarball → prefer bare
+	// Same version and platform, both bare and tarball → prefer bare.
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"tool/1.0.0/linux-amd64",
-		"tool/1.0.0/linux-amd64.tar.gz",
+		"tool/1.0.0/linux-amd64/tool",
+		"tool/1.0.0/linux-amd64/tool.tar.gz",
 	})
 	arts, _ := scan(root, "tool")
 	got, err := resolve(arts, "linux", "amd64", "")
@@ -183,30 +172,17 @@ func TestBareFileOverArchive(t *testing.T) {
 	}
 }
 
-func TestVersionlessAndVersionedMixed(t *testing.T) {
-	// B + C coexist. Versioned wins because 1.0.0 > "" in our ordering.
+func TestAmbiguousSameExt(t *testing.T) {
+	// Two bare files same version + platform → ambiguous.
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"tool/linux-amd64",
-		"tool/1.0.0/linux-amd64",
+		"tool/1.0.0/linux-amd64/tool",
+		"tool/1.0.0/linux-amd64/tool-alt",
 	})
 	arts, _ := scan(root, "tool")
-	got, err := resolve(arts, "linux", "amd64", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got.Version != "1.0.0" {
-		t.Errorf("want versioned 1.0.0 to win, got version=%q path=%s", got.Version, got.Path)
-	}
-}
-
-func TestOSArchMismatch(t *testing.T) {
-	root := t.TempDir()
-	mkTree(t, root, []string{"tool/linux-amd64"})
-	arts, _ := scan(root, "tool")
-	_, err := resolve(arts, "linux", "", "")
-	if !errors.Is(err, ErrInvalid) {
-		t.Errorf("want ErrInvalid for os without arch, got %v", err)
+	_, err := resolve(arts, "linux", "amd64", "")
+	if !errors.Is(err, ErrAmbiguous) {
+		t.Errorf("want ErrAmbiguous, got %v", err)
 	}
 }
 
@@ -219,7 +195,7 @@ func TestCompareVersion(t *testing.T) {
 		{"1.0.0", "1.0.0", 0},
 		{"1.0.0", "2.0.0", -1},
 		{"v1.0.0", "1.0.0", 0},
-		{"1.0.0", "latest", 1}, // semver > non-semver
+		{"1.0.0", "latest", 1},
 		{"abc", "abd", -1},
 	}
 	for _, c := range cases {

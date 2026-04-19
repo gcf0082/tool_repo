@@ -91,14 +91,13 @@ done
 log "== get_tool assertions =="
 assert_status "/get_tool?name=ripgrep&os=linux&arch=amd64"                200 "rg-14.1.0-linux"
 assert_status "/get_tool?name=ripgrep&os=linux&arch=amd64&version=14.0.3" 200 "rg-14.0.3-linux"
+assert_status "/get_tool?name=ripgrep&os=darwin&arch=arm64"               200 "rg-14.1.0-darwin"
 assert_status "/get_tool?name=ripgrep&os=linux&arch=arm64"                404
-assert_status "/get_tool?name=deploy-script"                              200 "deploy-1.2.0"
-assert_status "/get_tool?name=deploy-script&version=1.1.0"                200 "deploy-1.1.0"
-assert_status "/get_tool?name=deploy-script&os=linux&arch=amd64"          404
 assert_status "/get_tool?name=fzf&os=linux&arch=amd64"                    200 "fzf-binary"
-assert_status "/get_tool?name=nope"                                       404
+assert_status "/get_tool?name=fzf"                                        400
 assert_status "/get_tool?name=fzf&os=linux"                               400
-assert_status "/get_tool?name=..%2Fetc"                                   400
+assert_status "/get_tool?name=nope&os=linux&arch=amd64"                   404
+assert_status "/get_tool?name=..%2Fetc&os=linux&arch=amd64"               400
 
 assert_header "/get_tool?name=ripgrep&os=linux&arch=amd64" "Content-Type" "application/gzip"
 assert_header "/get_tool?name=fzf&os=linux&arch=amd64"    "Content-Type" "application/octet-stream"
@@ -250,7 +249,7 @@ dl_tmp="$(mktemp -d)"
 (
   cd "$dl_tmp"
   if "$OLDPWD/tool_cli" get fzf --os linux --arch amd64 >/dev/null 2>&1; then
-    if [[ -f ./linux-amd64 && "$(cat ./linux-amd64)" == "fzf-binary" ]]; then
+    if [[ -f ./fzf && "$(cat ./fzf)" == "fzf-binary" ]]; then
       ok "tool_cli get fzf downloaded correct file"
     else
       ko "tool_cli get fzf wrong file: $(ls)"
@@ -266,7 +265,7 @@ dl_tmp="$(mktemp -d)"
 (
   cd "$dl_tmp"
   if "$OLDPWD/tool_cli" get ripgrep --os linux --arch amd64 --version 14.0.3 >/dev/null 2>&1; then
-    if [[ -f ./linux-amd64.tar.gz && "$(cat ./linux-amd64.tar.gz)" == "rg-14.0.3-linux" ]]; then
+    if [[ -f ./ripgrep.tar.gz && "$(cat ./ripgrep.tar.gz)" == "rg-14.0.3-linux" ]]; then
       ok "tool_cli get ripgrep --version 14.0.3"
     else
       ko "tool_cli get ripgrep pinned-version wrong file"
@@ -309,7 +308,7 @@ rm -rf "$(dirname "$TARGET_DIR")"
 # get with --dir downloads into that dir (creating if needed)
 TARGET_DIR="$(mktemp -d)/downloads"
 if ./tool_cli get fzf --os linux --arch amd64 --dir "$TARGET_DIR" >/dev/null 2>&1; then
-  if [[ -f "$TARGET_DIR/linux-amd64" && "$(cat "$TARGET_DIR/linux-amd64")" == "fzf-binary" ]]; then
+  if [[ -f "$TARGET_DIR/fzf" && "$(cat "$TARGET_DIR/fzf")" == "fzf-binary" ]]; then
     ok "tool_cli get fzf --dir $TARGET_DIR"
   else
     ko "tool_cli get --dir wrong file: $(ls "$TARGET_DIR" 2>&1)"

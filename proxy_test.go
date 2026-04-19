@@ -14,7 +14,7 @@ import (
 func newUpstream(t *testing.T) *httptest.Server {
 	t.Helper()
 	root := t.TempDir()
-	writeFile(t, root, "fzf/linux-amd64", "fzf-bin-from-upstream")
+	writeFile(t, root, "fzf/0.1.0/linux-amd64/fzf", "fzf-bin-from-upstream")
 
 	scriptsRoot := t.TempDir()
 	writeFile(t, scriptsRoot, "hello.sh", "#!/bin/sh\necho hello-upstream\n")
@@ -58,7 +58,7 @@ func TestProxyGetToolPassesThrough(t *testing.T) {
 	if body != "fzf-bin-from-upstream" {
 		t.Errorf("body %q", body)
 	}
-	if cd := resp.Header.Get("Content-Disposition"); !strings.Contains(cd, `filename="linux-amd64"`) {
+	if cd := resp.Header.Get("Content-Disposition"); !strings.Contains(cd, `filename="fzf"`) {
 		t.Errorf("content-disposition missing from proxied response: %q", cd)
 	}
 }

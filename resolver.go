@@ -27,6 +27,13 @@ var (
 	platformRe = regexp.MustCompile(`^([a-z0-9]+)-([a-z0-9]+)$`)
 )
 
+// Directory layout (single, canonical):
+//
+//   packages/<name>/<version>/<os-arch>/<file>
+//
+// Every level except the leaf must be a directory. Leaf file name is
+// free-form; its extension (tar.gz / bare / ...) only affects ranking
+// when multiple candidates coexist for the same version+platform.
 type Artifact struct {
 	Path     string
 	Name     string
@@ -50,15 +57,12 @@ func splitArchiveExt(fname string) (stem, ext string) {
 	return fname, ""
 }
 
-func isPlatform(stem string) (platform string, ok bool) {
-	m := platformRe.FindStringSubmatch(stem)
+func isValidPlatform(plat string) bool {
+	m := platformRe.FindStringSubmatch(plat)
 	if m == nil {
-		return "", false
+		return false
 	}
-	if !allowedOS[m[1]] || !allowedArch[m[2]] {
-		return "", false
-	}
-	return stem, true
+	return allowedOS[m[1]] && allowedArch[m[2]]
 }
 
 func scan(root, name string) ([]Artifact, error) {
@@ -66,7 +70,7 @@ func scan(root, name string) ([]Artifact, error) {
 		return nil, fmt.Errorf("%w: bad name %q", ErrInvalid, name)
 	}
 	dir := filepath.Join(root, name)
-	entries, err := os.ReadDir(dir)
+	versions, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, ErrNotFound
@@ -75,63 +79,52 @@ func scan(root, name string) ([]Artifact, error) {
 	}
 
 	var arts []Artifact
-	for _, e := range entries {
-		if e.IsDir() {
-			// Layout C: version directory
-			ver := e.Name()
-			if !nameRe.MatchString(ver) {
+	for _, v := range versions {
+		if !v.IsDir() {
+			continue
+		}
+		ver := v.Name()
+		if !nameRe.MatchString(ver) {
+			continue
+		}
+		platDir := filepath.Join(dir, ver)
+		platforms, err := os.ReadDir(platDir)
+		if err != nil {
+			continue
+		}
+		for _, p := range platforms {
+			if !p.IsDir() {
 				continue
 			}
-			subs, err := os.ReadDir(filepath.Join(dir, ver))
+			plat := p.Name()
+			if !isValidPlatform(plat) {
+				continue
+			}
+			files, err := os.ReadDir(filepath.Join(platDir, plat))
 			if err != nil {
 				continue
 			}
-			for _, s := range subs {
-				if s.IsDir() {
+			for _, f := range files {
+				if f.IsDir() {
 					continue
 				}
-				stem, ext := splitArchiveExt(s.Name())
-				plat, ok := isPlatform(stem)
-				if !ok {
-					continue
-				}
+				_, ext := splitArchiveExt(f.Name())
 				arts = append(arts, Artifact{
-					Path:     filepath.Join(name, ver, s.Name()),
+					Path:     filepath.Join(name, ver, plat, f.Name()),
 					Name:     name,
 					Version:  ver,
 					Platform: plat,
 					Ext:      ext,
 				})
 			}
-			continue
 		}
-		// File at packages/<name>/
-		stem, ext := splitArchiveExt(e.Name())
-		if plat, ok := isPlatform(stem); ok {
-			// Layout B: versionless platform-specific
-			arts = append(arts, Artifact{
-				Path:     filepath.Join(name, e.Name()),
-				Name:     name,
-				Version:  "",
-				Platform: plat,
-				Ext:      ext,
-			})
-			continue
-		}
-		// Layout D: platform-agnostic, file name (with ext) is identifier
-		arts = append(arts, Artifact{
-			Path:     filepath.Join(name, e.Name()),
-			Name:     name,
-			Version:  stem,
-			Platform: "",
-			Ext:      ext,
-		})
 	}
 	return arts, nil
 }
 
-// compareVersion returns -1/0/1 for a<b/a==b/a>b. Prefers semver; falls back
-// to lexical. Semver beats non-semver (semver is considered "larger").
+// compareVersion returns -1/0/1 for a<b/a==b/a>b. Prefers semver; falls
+// back to lexical. Semver beats non-semver (semver is considered
+// "larger") so canonical 1.2.0 wins against ad-hoc "latest" siblings.
 func compareVersion(a, b string) int {
 	sa := toSemverForm(a)
 	sb := toSemverForm(b)
@@ -156,26 +149,18 @@ func toSemverForm(v string) string {
 	return "v" + v
 }
 
-// resolve filters artifacts by query and picks the best single candidate.
+// resolve filters by required (os, arch) and optional version, then
+// picks the best candidate.
 func resolve(arts []Artifact, osName, arch, version string) (*Artifact, error) {
-	if (osName == "") != (arch == "") {
-		return nil, fmt.Errorf("%w: os and arch must be given together", ErrInvalid)
+	if osName == "" || arch == "" {
+		return nil, fmt.Errorf("%w: os and arch are required", ErrInvalid)
 	}
-	wantPlat := ""
-	if osName != "" {
-		wantPlat = osName + "-" + arch
-	}
+	wantPlat := osName + "-" + arch
 
 	var cands []Artifact
 	for _, a := range arts {
-		if wantPlat == "" {
-			if a.Platform != "" {
-				continue
-			}
-		} else {
-			if a.Platform != wantPlat {
-				continue
-			}
+		if a.Platform != wantPlat {
+			continue
 		}
 		if version != "" && a.Version != version {
 			continue
@@ -191,12 +176,10 @@ func resolve(arts []Artifact, osName, arch, version string) (*Artifact, error) {
 		if c := compareVersion(vi, vj); c != 0 {
 			return c > 0 // larger version first
 		}
-		// Same version: prefer bare file over archives
 		return extRank(cands[i].Ext) < extRank(cands[j].Ext)
 	})
 
 	best := cands[0]
-	// Detect ambiguity: multiple with identical (version, ext) score
 	if len(cands) > 1 {
 		second := cands[1]
 		if compareVersion(best.Version, second.Version) == 0 && extRank(best.Ext) == extRank(second.Ext) {
@@ -206,7 +189,6 @@ func resolve(arts []Artifact, osName, arch, version string) (*Artifact, error) {
 	return &best, nil
 }
 
-// extRank: smaller = more preferred.
 func extRank(ext string) int {
 	switch ext {
 	case "":
