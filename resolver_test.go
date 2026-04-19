@@ -33,7 +33,7 @@ func TestScanLayout(t *testing.T) {
 		"ripgrep/14.0.3/linux-amd64/ripgrep.tar.gz",
 		"ripgrep/14.1.0/linux-amd64/ripgrep.tar.gz",
 		"ripgrep/14.1.0/darwin-arm64/ripgrep.tar.gz",
-		"fzf/0.1.0/linux-amd64/fzf",
+		"fzf/0.1.0/linux-amd64/fzf.tar.gz",
 	})
 
 	arts, err := scan(root, "ripgrep")
@@ -53,13 +53,32 @@ func TestScanLayout(t *testing.T) {
 	}
 }
 
+func TestScanSkipsBareFiles(t *testing.T) {
+	root := t.TempDir()
+	mkTree(t, root, []string{
+		"tool/1.0.0/linux-amd64/tool.tar.gz", // accepted
+		"tool/1.0.0/linux-amd64/tool",        // bare — skipped (must end in an archive ext)
+		"tool/1.0.0/linux-amd64/tool.tgz",    // accepted
+		"tool/1.0.0/linux-amd64/tool.7z",     // accepted
+		"tool/1.0.0/linux-amd64/tool.zip",    // accepted
+		"tool/1.0.0/linux-amd64/README.md",   // not an archive — skipped
+	})
+	arts, err := scan(root, "tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(arts) != 4 {
+		t.Errorf("want 4 arts (.tar.gz/.tgz/.7z/.zip), got %d: %+v", len(arts), arts)
+	}
+}
+
 func TestScanSkipsInvalidEntries(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"foo/1.0.0/linux-amd64/a",
-		"foo/1.0.0/bogus-platform/b", // unknown OS/arch → skipped
-		"foo/stray-file",             // file at name level → skipped
-		"foo/1.0.0/linux-amd64/nested/", // directory inside platform → skipped
+		"foo/1.0.0/linux-amd64/a.tar.gz",
+		"foo/1.0.0/bogus-platform/b.tar.gz", // unknown OS/arch → skipped
+		"foo/stray-file",                     // file at name level → skipped
+		"foo/1.0.0/linux-amd64/nested/",      // directory inside platform → skipped
 	})
 	arts, err := scan(root, "foo")
 	if err != nil {
@@ -125,7 +144,7 @@ func TestResolvePicksLatestByPlatform(t *testing.T) {
 
 func TestResolveRequiresOSArch(t *testing.T) {
 	root := t.TempDir()
-	mkTree(t, root, []string{"x/1.0.0/linux-amd64/a"})
+	mkTree(t, root, []string{"x/1.0.0/linux-amd64/a.tar.gz"})
 	arts, _ := scan(root, "x")
 
 	for _, c := range []struct{ os, arch string }{
@@ -141,9 +160,9 @@ func TestResolveRequiresOSArch(t *testing.T) {
 func TestSemverRegression(t *testing.T) {
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"tool/1.2.0/linux-amd64/tool",
-		"tool/1.9.0/linux-amd64/tool",
-		"tool/1.10.0/linux-amd64/tool",
+		"tool/1.2.0/linux-amd64/tool.tar.gz",
+		"tool/1.9.0/linux-amd64/tool.tar.gz",
+		"tool/1.10.0/linux-amd64/tool.tar.gz",
 	})
 	arts, _ := scan(root, "tool")
 	got, err := resolve(arts, "linux", "amd64", "")
@@ -155,29 +174,29 @@ func TestSemverRegression(t *testing.T) {
 	}
 }
 
-func TestBareFileOverArchive(t *testing.T) {
-	// Same version and platform, both bare and tarball → prefer bare.
+func TestTarGzOverZip(t *testing.T) {
+	// Same version and platform, both .tar.gz and .zip → prefer .tar.gz.
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"tool/1.0.0/linux-amd64/tool",
 		"tool/1.0.0/linux-amd64/tool.tar.gz",
+		"tool/1.0.0/linux-amd64/tool.zip",
 	})
 	arts, _ := scan(root, "tool")
 	got, err := resolve(arts, "linux", "amd64", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Ext != "" {
-		t.Errorf("want bare file (ext=\"\"), got ext=%q path=%s", got.Ext, got.Path)
+	if got.Ext != ".tar.gz" {
+		t.Errorf("want .tar.gz preferred, got ext=%q path=%s", got.Ext, got.Path)
 	}
 }
 
 func TestAmbiguousSameExt(t *testing.T) {
-	// Two bare files same version + platform → ambiguous.
+	// Two .tar.gz files same version + platform → ambiguous.
 	root := t.TempDir()
 	mkTree(t, root, []string{
-		"tool/1.0.0/linux-amd64/tool",
-		"tool/1.0.0/linux-amd64/tool-alt",
+		"tool/1.0.0/linux-amd64/tool.tar.gz",
+		"tool/1.0.0/linux-amd64/tool-alt.tar.gz",
 	})
 	arts, _ := scan(root, "tool")
 	_, err := resolve(arts, "linux", "amd64", "")

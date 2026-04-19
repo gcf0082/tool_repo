@@ -12,6 +12,8 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+// Accepted package file formats. The file name itself is free-form;
+// it just has to end with one of these extensions.
 var archiveExts = []string{
 	".tar.gz", ".tgz",
 	".tar.bz2", ".tbz2",
@@ -109,6 +111,9 @@ func scan(root, name string) ([]Artifact, error) {
 					continue
 				}
 				_, ext := splitArchiveExt(f.Name())
+				if ext == "" {
+					continue // only .tar.gz / .zip are treated as packages
+				}
 				arts = append(arts, Artifact{
 					Path:     filepath.Join(name, ver, plat, f.Name()),
 					Name:     name,
@@ -189,15 +194,22 @@ func resolve(arts []Artifact, osName, arch, version string) (*Artifact, error) {
 	return &best, nil
 }
 
+// extRank: smaller = more preferred when multiple files coexist for
+// the same version+platform. Bare files aren't scanned anymore, so
+// .tar.gz family leads.
 func extRank(ext string) int {
 	switch ext {
-	case "":
-		return 0
 	case ".tar.gz", ".tgz":
-		return 1
+		return 0
 	case ".zip":
+		return 1
+	case ".tar.bz2", ".tbz2":
 		return 2
-	default:
+	case ".tar.xz", ".txz":
 		return 3
+	case ".7z":
+		return 4
+	default:
+		return 5
 	}
 }

@@ -15,7 +15,7 @@ import (
 func main() {
 	dir := flag.String("dir", ".", "data root; must contain a packages/ and/or scripts/ subdirectory (ignored when -upstream is set)")
 	host := flag.String("host", "0.0.0.0", "bind IP address")
-	port := flag.Int("port", 8080, "listen port")
+	port := flag.Int("port", 28080, "listen port")
 	upstream := flag.String("upstream", "", "if set, proxy business requests to this URL and serve no local data")
 	flag.Parse()
 

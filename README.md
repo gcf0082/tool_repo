@@ -7,13 +7,13 @@
 **服务端：**
 
 ```bash
-go run . -dir . -port 8080    # 当前目录下要有 packages/ 和/或 scripts/
+go run . -dir . -port 28080   # 当前目录下要有 packages/ 和/或 scripts/
 ```
 
 **客户端（任何一台新机器）：**
 
 ```bash
-curl -fsSL http://host:8080/install_tool_cli | sh      # 装客户端 + 自动配 URL
+curl -fsSL http://host:28080/install_tool_cli | sh      # 装客户端 + 自动配 URL
 tool_cli ping                                          # 验证连通
 tool_cli install ripgrep                               # 装工具
 ```
@@ -39,7 +39,7 @@ packages/
 ├── fzf/
 │   └── 0.1.0/
 │       └── linux-amd64/
-│           └── fzf                 # 裸二进制
+│           └── fzf.tar.gz
 └── ripgrep/
     ├── 14.0.3/
     │   └── linux-amd64/
@@ -52,8 +52,9 @@ packages/
 ```
 
 - 平台命名 Go 风格：`linux-amd64`、`darwin-arm64`、`windows-amd64`
-- 叶子文件名随意；扩展名仅用于响应的 `Content-Type`、以及同版本同平台多文件时的优先级：裸文件 > `.tar.gz` > 其他压缩
+- 叶子文件名**随意**，只需以支持的压缩后缀结尾；裸文件不再接受
 - 支持的压缩扩展：`.tar.gz` / `.tgz` / `.tar.bz2` / `.tbz2` / `.tar.xz` / `.txz` / `.zip` / `.7z`
+- 同版本同平台下多个文件共存时优先级：`.tar.gz` > `.zip` > `.tar.bz2` > `.tar.xz` > `.7z`
 
 `/get_tool` 请求必须带 `name` + `os` + `arch`；`version` 可选（不给取 semver 最大）。平台无关 / 无版本的场景不再支持（如需要，把脚本放到 `scripts/` 用 `run remote://` 执行）。
 
@@ -72,17 +73,17 @@ packages/
 
 - `name` / `os` / `arch` 必选；`version` 可选
 - 无 `version` → 按 semver 挑最大，非 semver 按字典序兜底
-- 同一包同版本同平台多文件时：裸文件 > `.tar.gz` > 其他；仍有并列 → 409 Conflict
+- 同一包同版本同平台多文件时：`.tar.gz` > `.zip` > 其他；仍有并列 → 409 Conflict
 - `/get_tool` 响应带 `Content-Disposition: attachment; filename="..."`，可用 `curl -OJ` 保留文件名
 
 ### 示例
 
 ```bash
 # 用 curl 手动下载（os/arch 必填）
-curl 'http://host:8080/get_tool?name=ripgrep&os=linux&arch=amd64' -OJ
+curl 'http://host:28080/get_tool?name=ripgrep&os=linux&arch=amd64' -OJ
 
 # 用 /install_tool 一行装到当前目录
-curl -fsSL 'http://host:8080/install_tool?name=ripgrep' | sh
+curl -fsSL 'http://host:28080/install_tool?name=ripgrep' | sh
 
 # 用客户端（os/arch 自动 uname 推断）
 tool_cli install ripgrep
@@ -91,15 +92,15 @@ tool_cli install ripgrep
 ## 服务端运行参数
 
 ```bash
-tool_repo -dir . -host 0.0.0.0 -port 8080
+tool_repo -dir . -host 0.0.0.0 -port 28080
 ```
 
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `-dir` | `.` | 数据根目录；下面约定 `packages/` 和 `scripts/` 两个子目录（任一存在即可，另一个缺失则对应端点关闭）。`-upstream` 模式下忽略 |
 | `-host` | `0.0.0.0` | 绑定 IP |
-| `-port` | `8080` | 监听端口 |
-| `-upstream` | *(空)* | 若设置则进入转发模式，不再需要 `-dir`；值形如 `http://other:8080` |
+| `-port` | `28080` | 监听端口 |
+| `-upstream` | *(空)* | 若设置则进入转发模式，不再需要 `-dir`；值形如 `http://other:28080` |
 
 ## 转发模式（类 nginx 反代）
 
@@ -107,10 +108,10 @@ tool_repo -dir . -host 0.0.0.0 -port 8080
 
 ```bash
 # 源节点（数据根目录里有 packages/ 和/或 scripts/）
-tool_repo -dir /srv/tool_repo -port 8080
+tool_repo -dir /srv/tool_repo -port 28080
 
 # 前端入口节点（不需要 -dir）
-tool_repo -upstream http://source-host:8080 -port 9090
+tool_repo -upstream http://source-host:28080 -port 9090
 ```
 
 前端节点行为：
@@ -127,7 +128,7 @@ tool_repo -upstream http://source-host:8080 -port 9090
 ### 一键引导（没有 tool_cli 时）
 
 ```bash
-curl -fsSL http://host:8080/install_tool_cli | sh
+curl -fsSL http://host:28080/install_tool_cli | sh
 ```
 
 服务端把嵌入的 `tool_cli` 装到 **`/usr/local/bin/tool_cli`**（非 root 自动 `sudo`），并用访问者实际用的 URL 自动执行 `set-url`，装完即可用。
@@ -135,7 +136,7 @@ curl -fsSL http://host:8080/install_tool_cli | sh
 自定义安装位置（不用 sudo）：
 
 ```bash
-curl -fsSL http://host:8080/install_tool_cli | DEST=$HOME/.local/bin/tool_cli sh
+curl -fsSL http://host:28080/install_tool_cli | DEST=$HOME/.local/bin/tool_cli sh
 ```
 
 ### 日常使用
@@ -144,7 +145,7 @@ curl -fsSL http://host:8080/install_tool_cli | DEST=$HOME/.local/bin/tool_cli sh
 tool_cli help                          # 列出所有命令
 tool_cli config                        # 查看 ~/.tool_cli/config.json
 tool_cli url                           # 打印当前配置的 URL
-tool_cli set-url http://host:8080      # 如果引导时没自动配
+tool_cli set-url http://host:28080      # 如果引导时没自动配
 tool_cli ping                          # 测试与服务端是否连通
 
 tool_cli get fzf                                 # 下载到当前目录；os/arch 自动 uname 推断
@@ -180,7 +181,7 @@ TOOL_CLI_URL=http://other:9090 tool_cli install fzf
 
 ```bash
 tool_cli run remote://deploy/prod.sh v1.2.0           # args 透传给脚本的 $@
-curl -fsSL 'http://host:8080/get_script?path=deploy/prod.sh' | sh -s -- v1.2.0
+curl -fsSL 'http://host:28080/get_script?path=deploy/prod.sh' | sh -s -- v1.2.0
 ```
 
 参数传递链路：`tool_cli → curl → sh -s -- args → 脚本($1...$@)`。`--` 防止 `-xxx` 参数被 sh 误解析；`set -o pipefail` 保证 curl 4xx/5xx 时整条命令非零退出。stdin 被管道占用，脚本内不能 `read` 交互输入。
@@ -189,7 +190,7 @@ curl -fsSL 'http://host:8080/get_script?path=deploy/prod.sh' | sh -s -- v1.2.0
 
 ```bash
 # 裸 curl
-curl -T ./local.sh 'http://host:8080/put_script?path=deploy/prod.sh'
+curl -T ./local.sh 'http://host:28080/put_script?path=deploy/prod.sh'
 
 # 或用 tool_cli
 tool_cli push ./local.sh remote://deploy/prod.sh

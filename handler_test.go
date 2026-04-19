@@ -28,7 +28,7 @@ func newTestServer(t *testing.T) (*httptest.Server, string) {
 	writeFile(t, root, "ripgrep/14.0.3/linux-amd64/ripgrep.tar.gz", "rg-14.0.3-linux")
 	writeFile(t, root, "ripgrep/14.1.0/linux-amd64/ripgrep.tar.gz", "rg-14.1.0-linux")
 	writeFile(t, root, "ripgrep/14.1.0/darwin-arm64/ripgrep.tar.gz", "rg-14.1.0-darwin")
-	writeFile(t, root, "fzf/0.1.0/linux-amd64/fzf", "fzf-bin")
+	writeFile(t, root, "fzf/0.1.0/linux-amd64/fzf.tar.gz", "fzf-bin")
 
 	s := &Server{Root: root}
 	mux := http.NewServeMux()
@@ -90,7 +90,7 @@ func TestGetRipgrepMissingPlatform(t *testing.T) {
 	}
 }
 
-func TestGetFzfVersionless(t *testing.T) {
+func TestGetFzf(t *testing.T) {
 	ts, _ := newTestServer(t)
 	defer ts.Close()
 	resp, body := get(t, ts.URL+"/get_tool?name=fzf&os=linux&arch=amd64")
@@ -100,7 +100,7 @@ func TestGetFzfVersionless(t *testing.T) {
 	if body != "fzf-bin" {
 		t.Errorf("got %q", body)
 	}
-	if ct := resp.Header.Get("Content-Type"); ct != "application/octet-stream" {
+	if ct := resp.Header.Get("Content-Type"); ct != "application/gzip" {
 		t.Errorf("content-type %q", ct)
 	}
 }
